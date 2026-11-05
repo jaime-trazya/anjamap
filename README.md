@@ -52,4 +52,4 @@ El GPS y la brújula solo funcionan con HTTPS (o en `localhost`).
 
 ## Publicación
 
-`.github/workflows/deploy.yml` publica en GitHub Pages cada vez que se sube algo a `main`, en `https://jaime-trazya.github.io/anjamap/`. Antes hay que activar Pages en el repositorio, con *Settings → Pages → Source: GitHub Actions*. La página lleva `noindex`.
+`.github/workflows/deploy.yml` compila, pasa lint y tests y publica `dist/` en la rama `gh-pages` cada vez que se sube algo a `main`. Pages sirve esa rama (*Settings → Pages → Deploy from a branch → gh-pages*) en https://jaime-trazya.github.io/anjamap/. La página lleva `noindex`.
