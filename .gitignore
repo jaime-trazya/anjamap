@@ -1,0 +1,20 @@
+# Dependencias y build
+node_modules/
+dist/
+dev-dist/
+coverage/
+*.tsbuildinfo
+.DS_Store
+*.log
+.vite/
+.taste-skill/
+
+# PRIVACIDAD: no subir nunca datos reales.
+# No subir copias de seguridad ni GPX con ubicaciones reales de fincas.
+*.json
+!package.json
+!package-lock.json
+!tsconfig*.json
+!public/**/*.json
+copia-anjamap-*.json
+*.gpx

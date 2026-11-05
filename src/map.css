@@ -1,0 +1,80 @@
+/* Piezas propias de Anjamap: mapa, navegación, grabación. Usa los tokens de styles.css. */
+:root { --accent-on: #ffffff; --me: #2f7cf6; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --accent-on: #11180a; } }
+:root[data-theme='dark'] { --accent-on: #11180a; }
+.btn.accent { color: var(--accent-on); }
+.btn.big { min-height: 54px; font-size: 17px; }
+.actions.three { grid-template-columns: repeat(3, 1fr); }
+a.action { text-decoration: none; }
+.big-num { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+.back-bar .btn.ghost { min-height: 44px; }
+.track.indeterminate > i { width: 35%; animation: indet 1.2s var(--ease-out) infinite; }
+@keyframes indet { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+.spinner { width: 34px; height: 34px; border-radius: 50%; border: 3px solid var(--control); border-top-color: var(--accent); animation: spin 900ms linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------- Mapa (Leaflet) ---------- */
+.map { position: absolute; inset: 0; background: #2a2d26; z-index: 0; }
+.leaflet-container { font-family: inherit; background: #2a2d26; }
+/* Leaflet 1.9 aclara el solape entre teselas; con el solape de 1 px (MapView) eso pintaría una rejilla */
+.leaflet-container img.leaflet-tile { mix-blend-mode: normal; }
+.leaflet-control-attribution { font-size: 9.5px; background: rgb(255 255 255 / 0.65) !important; color: #333; border-radius: 6px 0 0 0; }
+.leaflet-control-attribution a { color: #333; }
+.pin-wrap { background: none; border: 0; }
+.pin { position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.pin-dot { width: 20px; height: 20px; border-radius: 50%; background: var(--c); border: 3px solid #fff; box-shadow: 0 1px 6px rgb(0 0 0 / 0.45); transition: transform 160ms var(--ease-out); }
+.pin.sel .pin-dot { transform: scale(1.35); box-shadow: 0 0 0 6px color-mix(in srgb, var(--c) 35%, transparent), 0 1px 6px rgb(0 0 0 / 0.45); }
+.pin-label { position: absolute; top: 22px; white-space: nowrap; font-size: 12px; font-weight: 700; color: #fff; text-shadow: 0 1px 3px rgb(0 0 0 / 0.9), 0 0 2px rgb(0 0 0 / 0.9); max-width: 160px; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.me { position: absolute; width: 0; height: 0; }
+.me-dot { position: absolute; left: -9px; top: -9px; width: 18px; height: 18px; border-radius: 50%; background: var(--me); border: 3px solid #fff; box-shadow: 0 1px 6px rgb(0 0 0 / 0.4); }
+.me-cone { position: absolute; left: -28px; top: -28px; width: 56px; height: 56px; border-radius: 50%; background: conic-gradient(from -30deg, rgb(47 124 246 / 0.45) 0deg 60deg, transparent 60deg); transition: transform 150ms linear; }
+
+.map-screen { position: fixed; inset: 0; bottom: calc(var(--nav-h) + var(--safe-bottom)); overflow: hidden; }
+.map-top { position: absolute; z-index: 10; top: calc(var(--safe-top) + 10px); left: calc(12px + var(--safe-left)); right: calc(12px + var(--safe-right)); display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; pointer-events: none; }
+.map-top > * { pointer-events: auto; }
+.map-brand { display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--border); box-shadow: var(--shadow-float); min-height: 44px; min-width: 0; }
+.map-brand strong { font-size: 15px; letter-spacing: -0.01em; }
+.gps-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); flex: none; }
+.gps-dot.ok { background: var(--positive); }
+.gps-dot.meh { background: var(--warning); }
+.map-btn { box-shadow: var(--shadow-float); }
+.map-btn.on, .icon-btn.on { color: var(--accent); }
+.icon-btn:disabled { opacity: 0.5; }
+.row > .icon-btn { flex: none; }
+.map-fabs { position: absolute; z-index: 10; right: calc(12px + var(--safe-right)); bottom: 14px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.fab { width: 58px; height: 58px; border-radius: 20px; display: grid; place-items: center; background: var(--accent); color: var(--accent-on); box-shadow: var(--shadow-float); transition: transform 120ms var(--ease-out); }
+.fab:active { transform: scale(0.94); }
+.map-card { position: absolute; z-index: 10; left: calc(12px + var(--safe-left)); right: calc(84px + var(--safe-right)); bottom: 14px; max-width: 460px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px; box-shadow: var(--shadow-float); display: flex; flex-direction: column; gap: 12px; animation: toast-in 260ms var(--ease-out); }
+.map-mini { position: relative; height: 220px; }
+.map-mini.tall { height: 320px; }
+.card.flush .map-mini { border-radius: var(--radius-card) var(--radius-card) 0 0; overflow: hidden; }
+.card.flush > .map-mini:only-child { border-radius: var(--radius-card); }
+
+/* ---------- Pantallas completas: navegar, grabar, dibujar ---------- */
+.nav-screen { position: fixed; inset: 0; display: flex; flex-direction: column; background: var(--ground); padding-top: var(--safe-top); }
+.nav-head { display: flex; align-items: center; gap: 8px; padding: 4px calc(8px + var(--safe-right)) 4px calc(8px + var(--safe-left)); min-height: 52px; flex: none; }
+.nav-chips { flex: none; padding-bottom: 6px; margin: 0; }
+.nav-main { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 8px 16px; }
+.arrow-ring { position: relative; width: min(56vw, 30vh, 260px); aspect-ratio: 1; border-radius: 50%; background: var(--surface); border: 1px solid var(--border); display: grid; place-items: center; box-shadow: 0 10px 30px rgb(0 0 0 / 0.08); flex: none; }
+.arrow-ring.north { border-style: dashed; }
+.ring-n { position: absolute; top: 6px; left: 50%; margin-left: -5px; font-size: 12px; font-weight: 800; color: var(--negative); }
+.big-arrow { width: 72%; height: 72%; fill: var(--accent); transition: transform 180ms linear; filter: drop-shadow(0 4px 8px rgb(0 0 0 / 0.18)); }
+.nav-dist { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; }
+.nav-dist .num { font-size: clamp(40px, 12vw, 56px); font-weight: 700; letter-spacing: -0.035em; line-height: 1; }
+.nav-status { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; }
+.nav-status button.pill { height: 28px; padding: 0 12px; }
+.nav-wait { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.nav-arrived { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; color: var(--positive); max-width: 320px; }
+.nav-arrived strong { font-size: 28px; color: var(--text); letter-spacing: -0.02em; }
+.nav-map { position: relative; flex: none; height: 36vh; border-top: 1px solid var(--border); }
+.rec-map, .draw-map { position: relative; flex: 1; min-height: 0; }
+.rec-panel { flex: none; display: flex; flex-direction: column; gap: 10px; padding: 12px calc(16px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(16px + var(--safe-left)); background: var(--ground); border-top: 1px solid var(--border); }
+.rec-panel .kpis { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-card); }
+.crosshair { position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; margin: -22px 0 0 -22px; z-index: 500; pointer-events: none; }
+.crosshair::before, .crosshair::after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.55); }
+.crosshair::before { left: 21px; top: 0; width: 2px; height: 44px; }
+.crosshair::after { top: 21px; left: 0; height: 2px; width: 44px; }
+
+@media (min-width: 760px) {
+  .map-mini { height: 300px; }
+}
