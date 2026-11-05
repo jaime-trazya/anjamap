@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Car, ChevronRight, Layers, LocateFixed, MapPinPlus, Navigation, Plus, Search } from 'lucide-react'
 import { MapView } from '../map/MapView'
 import { setSetting, type Bancal } from '../db/db'
@@ -25,6 +25,7 @@ export function MapScreen() {
   const [buscar, setBuscar] = useState(false)
   const [cocheSheet, setCocheSheet] = useState(false)
   const saveTimer = useRef<number>(0)
+  useEffect(() => () => window.clearTimeout(saveTimer.current), [])
   const [initial] = useState(() => (settings.vista ? { center: [settings.vista.lat, settings.vista.lon] as LatLon, zoom: settings.vista.zoom } : null))
   // Primera vez sin vista guardada: encuadra los bancales
   const [fit, setFit] = useState<LatLon[] | null>(() => (!initial && bancales.length ? bancales.map((b) => [b.lat, b.lon] as LatLon) : null))
@@ -275,7 +276,7 @@ function BuscarSheet({ bancales, pos, onClose, onPick }: { bancales: Bancal[]; p
     <Sheet title="Buscar" onClose={onClose} full>
       <div className="search">
         <Search size={19} />
-        <input className="input" type="search" autoFocus placeholder="Nombre, finca, variedad…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" type="search" aria-label="Buscar bancal" autoFocus placeholder="Nombre, finca, variedad…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       {items.length ? (
         <section className="card flush list">

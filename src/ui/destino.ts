@@ -1,5 +1,5 @@
 import type { Bancal, Settings } from '../db/db'
-import type { LatLon } from '../lib/geo'
+import { isLatLon, type LatLon } from '../lib/geo'
 
 /** A dónde se navega: un bancal, el coche o un punto cualquiera del mapa */
 export interface Destino {
@@ -15,11 +15,17 @@ export function resolverDestino(id: string, params: URLSearchParams, bancales: B
   if (id === 'punto') {
     const lat = Number(params.get('lat'))
     const lon = Number(params.get('lon'))
-    if (!isFinite(lat) || !isFinite(lon) || !params.get('lat') || !params.get('lon')) return null
+    if (!isLatLon([lat, lon]) || !params.get('lat')?.trim() || !params.get('lon')?.trim()) return null
     return { tipo: 'punto', nombre: params.get('n') || 'Punto del mapa', p: [lat, lon], color: '#e0531b' }
   }
   const b = bancales.find((x) => x.id === id)
   return b ? { tipo: 'bancal', nombre: b.nombre, p: [b.lat, b.lon], color: b.color, bancal: b } : null
+}
+
+/** Si se ha borrado la ruta elegida, la navegación sigue funcionando con la recomendada. */
+export function resolverModo(modo: string | null, rutas: { id: string; bancalId: string }[], bancalId: string): string {
+  if (modo === 'directa' || modo === 'recomendada') return modo
+  return rutas.some((r) => r.id === modo && r.bancalId === bancalId) ? modo! : 'recomendada'
 }
 
 /** Ruta de navegación hasta un punto del mapa */

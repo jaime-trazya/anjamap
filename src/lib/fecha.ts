@@ -37,8 +37,12 @@ export function toDateInput(t: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 export function fromDateInput(s: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return NaN
   const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d, 12).getTime()
+  const date = new Date(0)
+  date.setFullYear(y, m - 1, d)
+  date.setHours(12, 0, 0, 0)
+  return toDateInput(date.getTime()) === s ? date.getTime() : NaN
 }
 
-export const kg = (n: number) => `${Math.round(n).toLocaleString('es-ES')} kg`
+export const kg = (n: number) => `${n.toLocaleString('es-ES', { maximumFractionDigits: 2 })} kg`

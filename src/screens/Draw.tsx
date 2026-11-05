@@ -8,8 +8,9 @@ import { usePosition } from '../ui/position'
 import { useEditor } from '../ui/editor'
 import { back, navigate, routeParams } from '../ui/router'
 import { useToast } from '../ui/toast'
-import { Segmented, Sheet } from '../ui/components'
+import { Empty, Segmented, Sheet } from '../ui/components'
 import { TIPOS } from '../domain/constants'
+import { useAction } from '../ui/useAction'
 
 type Modo = 'camino' | 'ruta' | 'bancal' | 'mover'
 
@@ -25,6 +26,7 @@ export function DrawScreen({ route }: { route: string }) {
   const { fix } = usePosition()
   const editor = useEditor()
   const toast = useToast()
+  const { busy, run } = useAction()
   const bancal = bancalId ? bancales.find((b) => b.id === bancalId) : undefined
   const [initial] = useState(() => {
     if (bancal) return { center: [bancal.lat, bancal.lon] as LatLon, zoom: 18 }
@@ -33,11 +35,16 @@ export function DrawScreen({ route }: { route: string }) {
     return null
   })
   const [center, setCenter] = useState<LatLon | null>(initial?.center ?? null)
+  const [fit, setFit] = useState<{ points: LatLon[]; key: string } | null>(null)
   const [pts, setPts] = useState<LatLon[]>([])
   const [finishing, setFinishing] = useState(false)
   const [nombre, setNombre] = useState('')
   const [tipoCamino, setTipoCamino] = useState<TipoCamino>('pista')
   const isLine = modo === 'camino' || modo === 'ruta'
+
+  if ((modo === 'ruta' || modo === 'mover') && !bancal) {
+    return <main className="screen sub"><Empty title="Este bancal ya no existe" action={<button className="btn" onClick={() => navigate('/bancales', true)}>Volver a bancales</button>} /></main>
+  }
 
   const titulo = modo === 'camino' ? 'Dibujar camino' : modo === 'ruta' ? `Ruta a ${bancal?.nombre ?? 'bancal'}` : modo === 'mover' ? `Mover ${bancal?.nombre ?? 'bancal'}` : 'Marcar bancal'
   const ayuda = isLine ? 'Mueve el mapa y pulsa + en cada curva. También puedes tocar el mapa.' : 'Mueve el mapa hasta que la cruz quede sobre el bancal.'
@@ -57,6 +64,7 @@ export function DrawScreen({ route }: { route: string }) {
   }
 
   const guardar = async () => {
+    if (pts.length < 2) return
     if (modo === 'ruta' && bancal) {
       await addRuta({ nombre: nombre.trim() || `Ruta a ${bancal.nombre}`, bancalId: bancal.id, puntos: pts, origen: 'dibujado' })
       toast.show('Ruta guardada')
@@ -93,6 +101,8 @@ export function DrawScreen({ route }: { route: string }) {
           draft={draft}
           user={fix}
           initial={initial}
+          fit={fit?.points}
+          fitKey={fit?.key}
           selectedId={bancal?.id}
           onMove={(c) => setCenter(c)}
           onTap={isLine ? (p) => setPts((x) => [...x, p]) : undefined}
@@ -124,11 +134,11 @@ export function DrawScreen({ route }: { route: string }) {
         ) : (
           <div className="row">
             {fix && (
-              <button className="btn" onClick={() => setCenter(fix.p)} title="Usar mi posición GPS">
+              <button className="btn" onClick={() => setFit({ points: [fix.p], key: String(Date.now()) })} title="Usar mi posición GPS">
                 Mi posición
               </button>
             )}
-            <button className="btn primary block" disabled={!center} onClick={() => void confirmarPunto()}>
+            <button className="btn primary block" disabled={!center || busy} onClick={() => void run(confirmarPunto)}>
               <Check size={18} /> {modo === 'mover' ? 'Mover aquí' : 'Bancal aquí'}
             </button>
           </div>
@@ -143,8 +153,8 @@ export function DrawScreen({ route }: { route: string }) {
             setFinishing(false)
           }}
           footer={
-            <button className="btn primary block" onClick={() => void guardar()}>
-              Guardar
+            <button className="btn primary block" disabled={busy} onClick={() => void run(guardar)}>
+              {busy ? 'Guardando…' : 'Guardar'}
             </button>
           }
         >

@@ -142,7 +142,7 @@ export function BancalDetail({ id }: { id: string }) {
       <div className="section">
         <h2>Diario</h2>
         {apuntes.length > 0 && (
-          <a className="link" href="#/diario">
+          <a className="link" href={`#/diario?bancal=${encodeURIComponent(b.id)}`}>
             Ver todo <ChevronRight size={16} />
           </a>
         )}

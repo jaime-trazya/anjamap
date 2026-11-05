@@ -1,37 +1,39 @@
 /** Importación y exportación GPX (Wikiloc, Google Earth vía GPX, otros GPS) */
-import type { LatLon } from '../lib/geo'
+import { isLatLon, type LatLon } from '../lib/geo'
 
 export interface GpxData {
   tracks: { name: string; points: LatLon[] }[]
   waypoints: { name: string; point: LatLon; desc?: string }[]
 }
 
-const num = (v: string | null) => (v === null ? NaN : Number(v))
+const num = (v: string | null) => (v === null || !v.trim() ? NaN : Number(v))
 
 export function parseGpx(xml: string): GpxData {
   const doc = new DOMParser().parseFromString(xml, 'application/xml')
-  if (doc.getElementsByTagName('parsererror').length) throw new Error('El archivo no es un GPX válido')
-  const text = (el: Element, tag: string) => el.getElementsByTagName(tag)[0]?.textContent?.trim() ?? ''
-  const pts = (els: HTMLCollectionOf<Element> | Element[]): LatLon[] =>
-    Array.from(els)
-      .map((p) => [num(p.getAttribute('lat')), num(p.getAttribute('lon'))] as LatLon)
-      .filter(([a, b]) => isFinite(a) && isFinite(b))
+  if (doc.getElementsByTagName('parsererror').length || doc.documentElement.localName !== 'gpx') throw new Error('El archivo no es un GPX válido')
+  const elements = (el: Document | Element, tag: string) => Array.from(el.getElementsByTagNameNS('*', tag))
+  const text = (el: Element, tag: string) => Array.from(el.childNodes).find((n) => n.nodeType === 1 && (n as Element).localName === tag)?.textContent?.trim() ?? ''
+  const pts = (els: Element[]): LatLon[] => {
+    const points = els.map((p) => [num(p.getAttribute('lat')), num(p.getAttribute('lon'))] as LatLon)
+    if (!points.every(isLatLon)) throw new Error('El GPX contiene coordenadas no válidas')
+    return points
+  }
 
   const tracks: GpxData['tracks'] = []
-  for (const trk of Array.from(doc.getElementsByTagName('trk'))) {
+  for (const trk of elements(doc, 'trk')) {
     const name = text(trk, 'name') || 'Camino importado'
-    const segs = Array.from(trk.getElementsByTagName('trkseg'))
+    const segs = elements(trk, 'trkseg')
     segs.forEach((seg, i) => {
-      const p = pts(seg.getElementsByTagName('trkpt'))
+      const p = pts(elements(seg, 'trkpt'))
       if (p.length >= 2) tracks.push({ name: segs.length > 1 ? `${name} (${i + 1})` : name, points: p })
     })
   }
-  for (const rte of Array.from(doc.getElementsByTagName('rte'))) {
-    const p = pts(rte.getElementsByTagName('rtept'))
+  for (const rte of elements(doc, 'rte')) {
+    const p = pts(elements(rte, 'rtept'))
     if (p.length >= 2) tracks.push({ name: text(rte, 'name') || 'Ruta importada', points: p })
   }
   const waypoints: GpxData['waypoints'] = []
-  for (const w of Array.from(doc.getElementsByTagName('wpt'))) {
+  for (const w of elements(doc, 'wpt')) {
     const [p] = pts([w])
     if (p) waypoints.push({ name: text(w, 'name') || 'Punto', point: p, desc: text(w, 'desc') || undefined })
   }

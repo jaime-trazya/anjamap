@@ -162,6 +162,8 @@ export function MapView(props: MapViewProps) {
       const c = map.getCenter()
       cb.current.onMove?.([c.lat, c.lng], map.getZoom())
     })
+    const center = map.getCenter()
+    cb.current.onMove?.([center.lat, center.lng], map.getZoom())
     mapRef.current = map
     // El contenedor puede cambiar de tamaño (barra de pestañas, hojas)
     const ro = new ResizeObserver(() => map.invalidateSize())

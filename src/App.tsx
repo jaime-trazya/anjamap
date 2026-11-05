@@ -141,7 +141,7 @@ function Shell() {
   else if (path === '/bancales') screen = <BancalesScreen />
   else if (seg[1] === 'bancal' && seg[2]) screen = <BancalDetail key={seg[2]} id={seg[2]} />
   else if (seg[1] === 'ir' && seg[2]) screen = <Navigate key={seg[2]} id={seg[2]} route={route} />
-  else if (path === '/diario') screen = <DiarioScreen />
+  else if (path === '/diario') screen = <DiarioScreen key={route} route={route} />
   else if (path === '/caminos') screen = <CaminosScreen />
   else if ((seg[1] === 'camino' || seg[1] === 'ruta') && seg[2]) screen = <LineDetail key={path} kind={seg[1]} id={seg[2]} />
   else if (path === '/grabar') screen = <RecordScreen route={route} />

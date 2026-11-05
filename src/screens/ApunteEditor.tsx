@@ -7,11 +7,13 @@ import { ApunteIcon } from '../ui/icons'
 import { useData } from '../ui/useData'
 import { useToast } from '../ui/toast'
 import type { ApunteOpts } from '../ui/editor'
+import { useAction } from '../ui/useAction'
 
 /** Apuntar algo en el diario de un bancal: poda, tratamiento, recolección (con kilos)… */
 export function ApunteEditor({ opts, onClose }: { opts: ApunteOpts; onClose: () => void }) {
   const { bancales } = useData()
   const toast = useToast()
+  const { busy, run } = useAction()
   const a = opts.apunte
   const [bancalId, setBancalId] = useState(a?.bancalId ?? opts.bancalId ?? '')
   const [tipo, setTipo] = useState<TipoApunte>(a?.tipo ?? opts.tipo ?? 'visita')
@@ -22,14 +24,17 @@ export function ApunteEditor({ opts, onClose }: { opts: ApunteOpts; onClose: () 
   const fijo = !!(a || opts.bancalId)
   const bancal = bancales.find((b) => b.id === bancalId)
   const kgNum = Number(kg.replace(',', '.'))
+  const fechaNum = fromDateInput(fecha)
+  const fechaOk = Number.isFinite(fechaNum) && fecha <= hoy
+  const kgOk = tipo !== 'recoleccion' || !kg.trim() || (/^\d+(?:[.,]\d+)?$/.test(kg.trim()) && Number.isFinite(kgNum) && kgNum >= 0)
 
   const save = async () => {
-    if (!bancal || !fecha) return
+    if (!bancal || !fechaOk || !kgOk) return
     await saveApunte({
       id: a?.id,
       bancalId: bancal.id,
       tipo,
-      fecha: fromDateInput(fecha),
+      fecha: fechaNum,
       kg: tipo === 'recoleccion' && kg.trim() && isFinite(kgNum) && kgNum >= 0 ? kgNum : undefined,
       nota: nota.trim() || undefined,
     })
@@ -49,12 +54,12 @@ export function ApunteEditor({ opts, onClose }: { opts: ApunteOpts; onClose: () 
       footer={
         <>
           {a && (
-            <button className="btn danger" onClick={() => void remove()}>
+            <button className="btn danger" disabled={busy} onClick={() => void run(remove)}>
               Borrar
             </button>
           )}
-          <button className="btn primary block" disabled={!bancal || !fecha} onClick={() => void save()}>
-            Guardar
+          <button className="btn primary block" disabled={busy || !bancal || !fechaOk || !kgOk} onClick={() => void run(save)}>
+            {busy ? 'Guardando…' : 'Guardar'}
           </button>
         </>
       }
@@ -86,12 +91,13 @@ export function ApunteEditor({ opts, onClose }: { opts: ApunteOpts; onClose: () 
       <div className="form-grid">
         <label className="field">
           <span>Día</span>
-          <input className="input" type="date" value={fecha} max={hoy} onChange={(e) => setFecha(e.target.value)} />
+          <input className="input" type="date" value={fecha} max={hoy} aria-invalid={!fechaOk} onChange={(e) => setFecha(e.target.value)} />
         </label>
         {tipo === 'recoleccion' && (
           <label className="field">
             <span>Kilos</span>
-            <input className="input num" inputMode="decimal" placeholder="0" value={kg} onChange={(e) => setKg(e.target.value.replace(/[^0-9.,]/g, ''))} />
+            <input className="input num" inputMode="decimal" placeholder="0" value={kg} aria-invalid={!kgOk} onChange={(e) => setKg(e.target.value)} />
+            {!kgOk && <span className="meta" role="alert">Introduce unos kilos válidos, por ejemplo 125,5.</span>}
           </label>
         )}
       </div>

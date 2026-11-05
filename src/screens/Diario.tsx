@@ -7,28 +7,27 @@ import { useData } from '../ui/useData'
 import { useEditor } from '../ui/editor'
 import { Empty, Stat } from '../ui/components'
 import { ApunteIcon } from '../ui/icons'
+import { resumenCosecha } from '../domain/diario'
+import { routeParams } from '../ui/router'
 
 /** Diario de todos los bancales por campañas (septiembre a agosto) */
-export function DiarioScreen() {
+export function DiarioScreen({ route }: { route: string }) {
   const { diario, bancales } = useData()
   const editor = useEditor()
   const [actual] = useState(() => campana(Date.now()))
   const campanas = useMemo(() => [...new Set([actual, ...diario.map((a) => campana(a.fecha))])].sort((a, b) => b - a), [diario, actual])
   const [sel, setSel] = useState(actual)
   const [tipo, setTipo] = useState<TipoApunte | 'todo'>('todo')
+  const [bancalId, setBancalId] = useState(() => routeParams(route).get('bancal') ?? '')
+  const bancalActivo = bancales.some((b) => b.id === bancalId) ? bancalId : ''
+  const deCampana = useMemo(() => diario.filter((a) => campana(a.fecha) === sel && (!bancalActivo || a.bancalId === bancalActivo)), [diario, sel, bancalActivo])
+  // El filtro de una campaña puede no existir en otra: no dejar el diario vacío por un filtro oculto.
+  const tipoActivo = deCampana.some((a) => a.tipo === tipo) ? tipo : 'todo'
   const byId = useMemo(() => new Map(bancales.map((b) => [b.id, b])), [bancales])
 
-  const deCampana = useMemo(() => diario.filter((a) => campana(a.fecha) === sel), [diario, sel])
-  const lista = useMemo(() => (tipo === 'todo' ? deCampana : deCampana.filter((a) => a.tipo === tipo)), [deCampana, tipo])
-  const cosecha = useMemo(() => deCampana.filter((a) => a.tipo === 'recoleccion'), [deCampana])
-  const totalKg = cosecha.reduce((s, a) => s + (a.kg ?? 0), 0)
-  const porBancal = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const a of cosecha) m.set(a.bancalId, (m.get(a.bancalId) ?? 0) + (a.kg ?? 0))
-    return [...m.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
-  }, [cosecha])
+  const lista = useMemo(() => (tipoActivo === 'todo' ? deCampana : deCampana.filter((a) => a.tipo === tipoActivo)), [deCampana, tipoActivo])
+  const { totalKg, porBancal, dias, kgPorOlivo } = useMemo(() => resumenCosecha(deCampana, bancales), [deCampana, bancales])
   const nb = new Set(deCampana.map((a) => a.bancalId)).size
-  const olivos = porBancal.reduce((s, [id]) => s + (byId.get(id)?.olivos ?? 0), 0)
 
   const meses = useMemo(() => {
     const m = new Map<string, typeof lista>()
@@ -48,10 +47,20 @@ export function DiarioScreen() {
           <div className="eyebrow">Campaña {campanaLabel(sel)}</div>
           <h1 className="title">Diario</h1>
         </div>
-        <button className="icon-btn primary" aria-label="Apuntar" disabled={!bancales.length} onClick={() => editor.openApunte()}>
+        <button className="icon-btn primary" aria-label="Apuntar" disabled={!bancales.length} onClick={() => editor.openApunte({ bancalId: bancalActivo || undefined })}>
           <Plus size={24} />
         </button>
       </div>
+
+      {bancales.length > 0 && (
+        <label className="field">
+          <span>Bancal</span>
+          <select className="select" value={bancalActivo} onChange={(e) => setBancalId(e.target.value)}>
+            <option value="">Todos los bancales</option>
+            {bancales.map((b) => <option key={b.id} value={b.id}>{b.nombre}{b.finca ? ` · ${b.finca}` : ''}</option>)}
+          </select>
+        </label>
+      )}
 
       {campanas.length > 1 && (
         <div className="chips">
@@ -68,7 +77,7 @@ export function DiarioScreen() {
           <Stat
             label="Cosecha"
             value={totalKg ? kg(totalKg) : '—'}
-            meta={olivos && totalKg ? `${(totalKg / olivos).toFixed(1).replace('.', ',')} kg por olivo` : `${cosecha.length} ${cosecha.length === 1 ? 'día' : 'días'} de recogida`}
+            meta={kgPorOlivo !== null ? `${kgPorOlivo.toFixed(1).replace('.', ',')} kg por olivo` : `${dias} ${dias === 1 ? 'día' : 'días'} de recogida`}
           />
           <Stat label="Apuntes" value={deCampana.length} meta={nb === 1 ? 'en 1 bancal' : `en ${nb} bancales`} />
         </div>
@@ -102,11 +111,11 @@ export function DiarioScreen() {
 
       {tipos.length > 1 && (
         <div className="chips">
-          <button className={`chip ${tipo === 'todo' ? 'on' : ''}`} onClick={() => setTipo('todo')}>
+          <button className={`chip ${tipoActivo === 'todo' ? 'on' : ''}`} onClick={() => setTipo('todo')}>
             Todo
           </button>
           {tipos.map((t) => (
-            <button key={t.value} className={`chip ${tipo === t.value ? 'on' : ''}`} onClick={() => setTipo(t.value)}>
+            <button key={t.value} className={`chip ${tipoActivo === t.value ? 'on' : ''}`} onClick={() => setTipo(t.value)}>
               <ApunteIcon tipo={t.value} size={16} /> {t.label}
             </button>
           ))}
@@ -119,7 +128,7 @@ export function DiarioScreen() {
             title={bancales.length ? 'Nada apuntado en esta campaña' : 'Primero guarda un bancal'}
             action={
               bancales.length ? (
-                <button className="btn primary" onClick={() => editor.openApunte()}>
+                <button className="btn primary" onClick={() => editor.openApunte({ bancalId: bancalActivo || undefined })}>
                   Apuntar algo
                 </button>
               ) : undefined

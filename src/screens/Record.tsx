@@ -2,14 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { Pause, Play, Square, Trash2, TriangleAlert } from 'lucide-react'
 import { MapView } from '../map/MapView'
 import { addCamino, addRuta, type TipoCamino } from '../db/db'
-import { distance, formatDistance, pathLength, simplify, type LatLon } from '../lib/geo'
+import { distance, formatDistance, isLatLon, pathLength, simplify, type LatLon } from '../lib/geo'
 import { useData } from '../ui/useData'
 import { usePosition } from '../ui/position'
 import { useWakeLock } from '../ui/wakelock'
 import { back, navigate, routeParams } from '../ui/router'
 import { useToast } from '../ui/toast'
-import { Notice, Segmented, Sheet, Stat } from '../ui/components'
+import { Empty, Notice, Segmented, Sheet, Stat } from '../ui/components'
 import { TIPOS } from '../domain/constants'
+import { useAction } from '../ui/useAction'
 
 const DRAFT_KEY = 'anjamap-grabacion'
 /** Lecturas peores que esto no se apuntan */
@@ -26,7 +27,10 @@ interface Draft {
 function loadDraft(): Draft | null {
   try {
     const s = localStorage.getItem(DRAFT_KEY)
-    return s ? (JSON.parse(s) as Draft) : null
+    if (!s) return null
+    const d = JSON.parse(s) as Draft
+    return d && (d.tipo === 'camino' || d.tipo === 'ruta') && (d.bancalId === null || typeof d.bancalId === 'string') &&
+      Array.isArray(d.puntos) && d.puntos.every(isLatLon) && Number.isFinite(d.t0) ? d : null
   } catch {
     return null
   }
@@ -46,6 +50,7 @@ export function RecordScreen({ route }: { route: string }) {
   const bancalId = params.get('bancal')
   const { bancales, caminos, settings } = useData()
   const toast = useToast()
+  const { busy, run } = useAction()
   const bancal = bancalId ? bancales.find((b) => b.id === bancalId) : undefined
   const { fix, error } = usePosition()
   useWakeLock()
@@ -94,6 +99,7 @@ export function RecordScreen({ route }: { route: string }) {
 
   const guardar = async () => {
     const puntos = simplify(draft.puntos, 1.5)
+    if (puntos.length < 2) return
     if (tipo === 'ruta' && bancal) {
       await addRuta({ nombre: nombre.trim() || `Ruta a ${bancal.nombre}`, bancalId: bancal.id, puntos, origen: 'grabado' })
       toast.show('Ruta guardada')
@@ -105,6 +111,10 @@ export function RecordScreen({ route }: { route: string }) {
       saveDraft(null)
       navigate(`/camino/${id}`, true)
     }
+  }
+
+  if (tipo === 'ruta' && !bancal) {
+    return <main className="screen sub"><Empty title="Este bancal ya no existe" action={<button className="btn" onClick={() => navigate('/bancales', true)}>Volver a bancales</button>} /></main>
   }
 
   return (
@@ -153,8 +163,8 @@ export function RecordScreen({ route }: { route: string }) {
           title={tipo === 'ruta' ? 'Guardar ruta' : 'Guardar camino'}
           onClose={() => setFinishing(false)}
           footer={
-            <button className="btn primary block" onClick={() => void guardar()}>
-              Guardar
+            <button className="btn primary block" disabled={busy} onClick={() => void run(guardar)}>
+              {busy ? 'Guardando…' : 'Guardar'}
             </button>
           }
         >

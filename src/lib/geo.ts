@@ -1,6 +1,11 @@
 /** Utilidades geográficas. Las coordenadas son siempre [lat, lon] en grados. */
 export type LatLon = [number, number]
 
+/** Coordenadas WGS84 válidas, sin convertir textos ni valores vacíos en números. */
+export function isLatLon(p: unknown): p is LatLon {
+  return Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number' && Number.isFinite(v)) && Math.abs(p[0]) <= 90 && Math.abs(p[1]) <= 180
+}
+
 const R = 6371008.8 // radio medio de la Tierra (m)
 const rad = (d: number) => (d * Math.PI) / 180
 const deg = (r: number) => (r * 180) / Math.PI

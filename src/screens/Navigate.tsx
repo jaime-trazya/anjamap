@@ -12,7 +12,7 @@ import { useHeading } from '../ui/heading'
 import { useWakeLock } from '../ui/wakelock'
 import { useEditor } from '../ui/editor'
 import { back, navigate, routeParams } from '../ui/router'
-import { conModo, resolverDestino } from '../ui/destino'
+import { conModo, resolverDestino, resolverModo } from '../ui/destino'
 import { Empty } from '../ui/components'
 import { GiroIcon } from '../ui/icons'
 
@@ -111,7 +111,7 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
   const d = useMemo(() => resolverDestino(id, new URLSearchParams(query), bancales, coche), [id, query, bancales, coche])
   const dest: LatLon | null = d?.p ?? null
   const propias = d?.bancal ? rutas.filter((r) => r.bancalId === d.bancal!.id) : []
-  const modo = new URLSearchParams(query).get('ruta') ?? 'recomendada'
+  const modo = resolverModo(new URLSearchParams(query).get('ruta'), rutas, id)
   const saved = useMemo(() => rutas.find((r) => r.id === modo && r.bancalId === id), [rutas, modo, id])
 
   const [showMap, setShowMap] = useState(true)

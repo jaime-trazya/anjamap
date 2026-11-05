@@ -9,6 +9,7 @@ import { pickFile } from '../ui/files'
 import { useToast } from '../ui/toast'
 import { Empty, Segmented, Sheet, Switch } from '../ui/components'
 import { COLORES } from '../domain/constants'
+import { useAction } from '../ui/useAction'
 
 const TIPO_LABEL = { pista: 'Pista', senda: 'Senda', atajo: 'Atajo' } as const
 
@@ -144,6 +145,7 @@ export function CaminosScreen() {
 
 function GpxImport({ file, data, bancalesCount, onClose }: { file: string; data: GpxData; bancalesCount: number; onClose: () => void }) {
   const toast = useToast()
+  const { busy, run: execute } = useAction()
   const [conPuntos, setConPuntos] = useState(true)
   const run = async () => {
     const now = Date.now()
@@ -173,8 +175,8 @@ function GpxImport({ file, data, bancalesCount, onClose }: { file: string; data:
       title="Importar GPX"
       onClose={onClose}
       footer={
-        <button className="btn primary block" onClick={() => void run()}>
-          Importar
+        <button className="btn primary block" disabled={busy || (!data.tracks.length && (!conPuntos || !data.waypoints.length))} onClick={() => void execute(run)}>
+          {busy ? 'Importando…' : 'Importar'}
         </button>
       }
     >

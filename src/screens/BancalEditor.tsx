@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocateFixed, MapPin, Satellite } from 'lucide-react'
 import { db, deleteBancal, uid, type Bancal } from '../db/db'
 import { formatCoord, type LatLon } from '../lib/geo'
@@ -10,12 +10,15 @@ import { navigate } from '../ui/router'
 import { autoDetalle } from '../ui/offline'
 import type { NewBancalOpts } from '../ui/editor'
 import { COLORES, VARIEDADES } from '../domain/constants'
+import { useAction } from '../ui/useAction'
 
 type Captura = { estado: 'buscando'; acc: number | null; n: number } | { estado: 'error'; msg: string } | null
 
 export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBancalOpts; onClose: () => void }) {
-  const { bancales, rutas, settings } = useData()
+  const { bancales, rutas, diario, settings } = useData()
   const toast = useToast()
+  const { busy, run } = useAction()
+  const capture = useRef<AbortController | null>(null)
   const existing = id ? bancales.find((b) => b.id === id) : undefined
   const [nombre, setNombre] = useState(existing?.nombre ?? opts?.nombre ?? `Bancal ${bancales.length + 1}`)
   const [finca, setFinca] = useState(existing?.finca ?? opts?.finca ?? '')
@@ -28,15 +31,23 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
   const autoGps = !!opts?.gps && !existing
   const [captura, setCaptura] = useState<Captura>(autoGps ? { estado: 'buscando', acc: null, n: 0 } : null)
   const fincas = useMemo(() => [...new Set(bancales.map((b) => b.finca).filter(Boolean) as string[])].sort(), [bancales])
+  const olivosOk = !olivos || (Number.isSafeInteger(Number(olivos)) && Number(olivos) > 0)
 
-  const startCapture = () =>
-    capturePoint((f, n) => setCaptura({ estado: 'buscando', acc: f.acc, n }))
+  const startCapture = () => {
+    capture.current?.abort()
+    const controller = new AbortController()
+    capture.current = controller
+    return capturePoint((f, n) => setCaptura({ estado: 'buscando', acc: f.acc, n }), 12000, 6, controller.signal)
       .then((f) => {
+        if (controller.signal.aborted) return
         setPoint(f.p)
         setPrecision(Math.round(f.acc))
         setCaptura(null)
       })
-      .catch((e: Error) => setCaptura({ estado: 'error', msg: e.message }))
+      .catch((e: Error) => {
+        if (!controller.signal.aborted) setCaptura({ estado: 'error', msg: e.message })
+      })
+  }
 
   const capturar = () => {
     setCaptura({ estado: 'buscando', acc: null, n: 0 })
@@ -45,18 +56,19 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
 
   useEffect(() => {
     if (autoGps) void startCapture()
+    return () => capture.current?.abort()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const save = async () => {
-    if (!point) return
+    if (!point || !olivosOk) return
     const now = Date.now()
     const b: Bancal = {
       id: existing?.id ?? uid(),
       nombre: nombre.trim() || 'Bancal',
       finca: finca.trim() || undefined,
       nota: nota.trim() || undefined,
-      olivos: Number(olivos) > 0 ? Math.round(Number(olivos)) : undefined,
+      olivos: olivos ? Number(olivos) : undefined,
       variedad: variedad.trim() || undefined,
       lat: point[0],
       lon: point[1],
@@ -76,9 +88,10 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
   const remove = async () => {
     if (!existing) return
     const n = rutas.filter((r) => r.bancalId === existing.id).length
+    const apuntes = diario.filter((a) => a.bancalId === existing.id).length
     const ok = await toast.confirm({
       title: `¿Borrar «${existing.nombre}»?`,
-      message: n ? `También se borrarán sus ${n} rutas guardadas.` : undefined,
+      message: n || apuntes ? `También se borrarán sus ${n} rutas guardadas y ${apuntes} apuntes del diario.` : undefined,
       confirmLabel: 'Borrar',
       danger: true,
     })
@@ -96,12 +109,12 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
       footer={
         <>
           {existing && (
-            <button className="btn danger" onClick={() => void remove()}>
+            <button className="btn danger" disabled={busy} onClick={() => void run(remove)}>
               Borrar
             </button>
           )}
-          <button className="btn primary block" disabled={!point || captura?.estado === 'buscando'} onClick={() => void save()}>
-            Guardar
+          <button className="btn primary block" disabled={busy || !point || !olivosOk || captura?.estado === 'buscando'} onClick={() => void run(save)}>
+            {busy ? 'Guardando…' : 'Guardar'}
           </button>
         </>
       }
@@ -158,7 +171,7 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
       <div className="form-grid">
         <label className="field">
           <span>Olivos</span>
-          <input className="input num" inputMode="numeric" value={olivos} onChange={(e) => setOlivos(e.target.value.replace(/D/g, ''))} placeholder="Opcional" />
+          <input className="input num" inputMode="numeric" value={olivos} aria-invalid={!olivosOk} onChange={(e) => setOlivos(e.target.value.replace(/\D/g, ''))} placeholder="Opcional" />
         </label>
         <label className="field">
           <span>Variedad</span>

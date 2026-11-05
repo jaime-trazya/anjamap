@@ -4,7 +4,7 @@
  * Las teselas se guardan con la Cache API (caché "anjamap-teselas"). La capa del mapa mira primero ahí,
  * así funciona sin cobertura y sin depender del service worker. Todo lo que ves con conexión también se guarda.
  */
-import { pointInRing, type LatLon } from '../lib/geo'
+import { isLatLon, pointInRing, type LatLon } from '../lib/geo'
 
 export type Capa = 'satelite' | 'mapa'
 
@@ -34,7 +34,9 @@ export interface Tile {
 }
 
 export const lon2x = (lon: number, z: number) => ((lon + 180) / 360) * 2 ** z
+const MERCATOR_LAT = 85.0511287798066
 export const lat2y = (lat: number, z: number) => {
+  lat = Math.max(-MERCATOR_LAT, Math.min(MERCATOR_LAT, lat))
   const r = (lat * Math.PI) / 180
   return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * 2 ** z
 }
@@ -70,12 +72,15 @@ export function tilesForPolygons(rings: LatLon[][], zmin: number, zmax: number):
 export function tilesAround(points: LatLon[], radius: number, zmin: number, zmax: number): Tile[] {
   const seen = new Set<string>()
   const out: Tile[] = []
-  for (const [lat, lon] of points) {
+  for (const point of points) {
+    if (!isLatLon(point) || Math.abs(point[0]) > MERCATOR_LAT) continue
+    const [lat, lon] = point
     const dLat = radius / 111320
     const dLon = radius / (111320 * Math.cos((lat * Math.PI) / 180))
     for (let z = zmin; z <= zmax; z++) {
-      const x0 = Math.floor(lon2x(lon - dLon, z)), x1 = Math.floor(lon2x(lon + dLon, z))
-      const y0 = Math.floor(lat2y(lat + dLat, z)), y1 = Math.floor(lat2y(lat - dLat, z))
+      const max = 2 ** z - 1
+      const x0 = Math.max(0, Math.floor(lon2x(lon - dLon, z))), x1 = Math.min(max, Math.floor(lon2x(lon + dLon, z)))
+      const y0 = Math.max(0, Math.floor(lat2y(lat + dLat, z))), y1 = Math.min(max, Math.floor(lat2y(lat - dLat, z)))
       for (let x = x0; x <= x1; x++)
         for (let y = y0; y <= y1; y++) {
           const k = `${z}/${x}/${y}`
@@ -114,23 +119,23 @@ export function hasCacheApi(): boolean {
 
 /** Pide una tesela: primero a la caché; si no está, a internet (y la guarda) */
 export async function getTile(url: string, save = true): Promise<Blob | null> {
+  let cache: Cache | null = null
   if (hasCacheApi()) {
     try {
-      const cache = await caches.open(CACHE)
+      cache = await caches.open(CACHE)
       const hit = await cache.match(url)
       if (hit) return await hit.blob()
-      if (!navigator.onLine) return null
-      const res = await fetch(url, { mode: 'cors' })
-      if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image/')) return null
-      if (save) await cache.put(url, res.clone()).catch(() => undefined)
-      return await res.blob()
     } catch {
-      return null
+      // La caché puede estar bloqueada (modo privado, espacio...). El mapa en línea sigue disponible.
+      cache = null
     }
   }
+  if (!navigator.onLine) return null
   try {
     const res = await fetch(url, { mode: 'cors' })
-    return res.ok ? await res.blob() : null
+    if (!res.ok || !(res.headers.get('content-type') ?? '').startsWith('image/')) return null
+    if (save && cache) await cache.put(url, res.clone()).catch(() => undefined)
+    return await res.blob()
   } catch {
     return null
   }
@@ -176,12 +181,12 @@ export async function descargar(id: string, nombre: string, tiles: Tile[], capa:
   if (actual?.estado === 'descargando') throw new Error('Ya hay una descarga en marcha')
   if (!hasCacheApi()) throw new Error('Este navegador no permite guardar mapas sin conexión')
   cancelar = false
-  actual = { id, nombre, total: tiles.length, hechas: 0, fallos: 0, estado: 'descargando' }
-  emitir()
-  const cache = await caches.open(CACHE)
+  const download: Descarga = { id, nombre, total: tiles.length, hechas: 0, fallos: 0, estado: 'descargando' }
+  const publish = () => { actual = download; emitir() }
+  publish()
   let i = 0
   let lastEmit = 0
-  const worker = async () => {
+  const worker = async (cache: Cache) => {
     while (!cancelar && i < tiles.length) {
       const t = tiles[i++]
       const url = CAPAS[capa].url(t.z, t.x, t.y)
@@ -197,23 +202,25 @@ export async function descargar(id: string, nombre: string, tiles: Tile[], capa:
           await new Promise((r) => setTimeout(r, 800 * (intento + 1)))
         }
       }
-      if (ok) actual!.hechas++
-      else actual!.fallos++
+      if (ok) download.hechas++
+      else download.fallos++
       const now = Date.now()
       if (now - lastEmit > 250) {
         lastEmit = now
-        emitir()
+        publish()
       }
     }
   }
   try {
-    await Promise.all(Array.from({ length: concurrencia }, worker))
-    actual.estado = cancelar ? 'cancelada' : 'terminada'
+    const cache = await caches.open(CACHE)
+    // Esperar a todos los workers incluso si uno falla: no dejar tareas de una descarga anterior vivas.
+    const results = await Promise.allSettled(Array.from({ length: Math.max(1, Math.floor(concurrencia)) }, () => worker(cache)))
+    download.estado = results.some((r) => r.status === 'rejected') ? 'error' : cancelar ? 'cancelada' : 'terminada'
   } catch {
-    actual.estado = 'error'
+    download.estado = 'error'
   }
-  emitir()
-  return actual
+  publish()
+  return { ...download }
 }
 
 /** Cuántas de estas teselas están ya guardadas */

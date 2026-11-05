@@ -1,3 +1,5 @@
+import { toDateInput } from '../lib/fecha'
+
 export function isIOS(): boolean {
   const ua = navigator.userAgent
   return /iPhone|iPad|iPod/.test(ua) || (ua.includes('Macintosh') && navigator.maxTouchPoints > 1)
@@ -41,4 +43,4 @@ export function pickFile(accept: string): Promise<File | null> {
   })
 }
 
-export const today = () => new Date().toISOString().slice(0, 10)
+export const today = () => toDateInput(Date.now())

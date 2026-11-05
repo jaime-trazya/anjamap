@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { LatLon } from '../lib/geo'
+import { isLatLon, type LatLon } from '../lib/geo'
 
 export const DB_NAME = 'anjamap'
 
@@ -162,27 +162,59 @@ export interface Backup {
 }
 
 export async function exportBackup(database = db): Promise<Backup> {
-  const [bancales, caminos, rutas, diario] = await Promise.all([database.bancales.toArray(), database.caminos.toArray(), database.rutas.toArray(), database.diario.toArray()])
-  return { app: 'anjamap', version: 2, fecha: new Date().toISOString(), bancales, caminos, rutas, diario }
+  return database.transaction('r', [database.bancales, database.caminos, database.rutas, database.diario], async () => {
+    const [bancales, caminos, rutas, diario] = await Promise.all([database.bancales.toArray(), database.caminos.toArray(), database.rutas.toArray(), database.diario.toArray()])
+    return { app: 'anjamap' as const, version: 2 as const, fecha: new Date().toISOString(), bancales, caminos, rutas, diario }
+  })
 }
 
-const isLatLon = (p: unknown): p is LatLon => Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === 'number' && isFinite(v))
+const record = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x)
+const text = (x: unknown): x is string => typeof x === 'string' && x.trim().length > 0
+const optionalText = (x: unknown) => x === undefined || typeof x === 'string'
+const nonnegative = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 0
+const timestamp = (x: unknown): x is number => nonnegative(x) && Number.isFinite(new Date(x).getTime())
+const apunteTypes = new Set<TipoApunte>(['poda', 'tratamiento', 'abono', 'riego', 'desbroce', 'recoleccion', 'visita', 'otro'])
+
+function validApunte(x: Record<string, unknown>): boolean {
+  return text(x.bancalId) && apunteTypes.has(x.tipo as TipoApunte) && timestamp(x.fecha) && optionalText(x.nota) && (x.kg === undefined || nonnegative(x.kg))
+}
 
 export function validateBackup(data: unknown): Backup {
-  const b = data as Partial<Backup>
-  if (!b || b.app !== 'anjamap' || !Array.isArray(b.bancales) || !Array.isArray(b.caminos) || !Array.isArray(b.rutas)) {
+  if (!record(data) || data.app !== 'anjamap' || !Array.isArray(data.bancales) || !Array.isArray(data.caminos) || !Array.isArray(data.rutas)) {
     throw new Error('El archivo no es una copia de Anjamap')
   }
-  for (const x of b.bancales) if (typeof x.id !== 'string' || !isFinite(x.lat) || !isFinite(x.lon)) throw new Error('Copia dañada: bancal sin coordenadas')
-  for (const x of [...b.caminos, ...b.rutas]) if (typeof x.id !== 'string' || !Array.isArray(x.puntos) || !x.puntos.every(isLatLon)) throw new Error('Copia dañada: camino sin puntos')
-  if (b.diario !== undefined && (!Array.isArray(b.diario) || b.diario.some((x) => typeof x.id !== 'string' || typeof x.bancalId !== 'string' || !isFinite(x.fecha)))) {
-    throw new Error('Copia dañada: diario')
+  if (data.version !== 1 && data.version !== 2) throw new Error('Versión de copia no compatible')
+  if (typeof data.fecha !== 'string' || !Number.isFinite(Date.parse(data.fecha))) throw new Error('Copia dañada: fecha no válida')
+  if (data.diario !== undefined && !Array.isArray(data.diario)) throw new Error('Copia dañada: diario')
+  const diario = data.diario ?? []
+  // Validar antes de abrir la transacción que puede reemplazar los datos actuales.
+  for (const rows of [data.bancales, data.caminos, data.rutas, diario]) {
+    const ids = new Set<string>()
+    for (const x of rows) {
+      if (!record(x) || !text(x.id) || ids.has(x.id)) throw new Error('Copia dañada: identificadores vacíos o repetidos')
+      ids.add(x.id)
+    }
   }
-  return { ...b, diario: b.diario ?? [] } as Backup
+  for (const x of data.bancales) {
+    if (!text(x.nombre) || !isLatLon([x.lat, x.lon]) || !timestamp(x.creado) || !timestamp(x.actualizado) ||
+      !(x.precision === null || nonnegative(x.precision)) || typeof x.color !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(x.color) ||
+      !optionalText(x.finca) || !optionalText(x.nota) || !optionalText(x.variedad) ||
+      (x.olivos !== undefined && !(Number.isSafeInteger(x.olivos) && x.olivos >= 0))) throw new Error('Copia dañada: datos de bancal no válidos')
+  }
+  const bancales = new Set(data.bancales.map((x) => x.id))
+  for (const x of [...data.caminos, ...data.rutas]) {
+    if (!text(x.nombre) || !timestamp(x.creado) || !['grabado', 'dibujado', 'gpx'].includes(x.origen) ||
+      !Array.isArray(x.puntos) || x.puntos.length < 2 || !x.puntos.every(isLatLon)) throw new Error('Copia dañada: camino o ruta sin puntos válidos')
+  }
+  for (const x of data.caminos) if (!['pista', 'senda', 'atajo'].includes(x.tipo)) throw new Error('Copia dañada: tipo de camino')
+  for (const x of data.rutas) if (!bancales.has(x.bancalId) || !optionalText(x.nota)) throw new Error('Copia dañada: ruta sin bancal')
+  for (const x of diario) if (!validApunte(x) || !timestamp(x.creado) || !bancales.has(x.bancalId)) throw new Error('Copia dañada: apunte no válido o sin bancal')
+  return { ...data, diario } as unknown as Backup
 }
 
 /** Restaura una copia. "fusionar" añade y actualiza; "reemplazar" borra lo actual primero. */
 export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', database = db) {
+  b = validateBackup(b)
   await database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario], async () => {
     if (modo === 'reemplazar') await Promise.all([database.bancales.clear(), database.caminos.clear(), database.rutas.clear(), database.diario.clear()])
     await database.bancales.bulkPut(b.bancales)
@@ -215,9 +247,13 @@ export async function deleteBancal(id: string, database = db) {
 
 /** Crea o actualiza un apunte del diario */
 export async function saveApunte(a: Omit<Apunte, 'id' | 'creado'> & { id?: string }, database = db): Promise<string> {
+  if (!validApunte(a)) throw new Error('Revisa el bancal, la fecha y los kilos del apunte')
   const id = a.id ?? uid()
-  const prev = a.id ? await database.diario.get(a.id) : undefined
-  await database.diario.put({ ...a, id, creado: prev?.creado ?? Date.now() })
+  await database.transaction('rw', database.bancales, database.diario, async () => {
+    if (!(await database.bancales.get(a.bancalId))) throw new Error('El bancal ya no existe')
+    const prev = a.id ? await database.diario.get(a.id) : undefined
+    await database.diario.put({ ...a, id, creado: prev?.creado ?? Date.now() })
+  })
   return id
 }
 

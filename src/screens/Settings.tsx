@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ChevronRight, CloudDownload, Download, FileDown, HardDrive, Smartphone, Upload } from 'lucide-react'
 import { db, exportBackup, importBackup, setSetting, validateBackup, type Backup } from '../db/db'
@@ -10,10 +10,12 @@ import { descargarComarca, descargarDetalle, NIVELES, tilesComarca, tilesDetalle
 import { pickFile, saveFile, today } from '../ui/files'
 import { useToast } from '../ui/toast'
 import { Segmented, Sheet, Switch } from '../ui/components'
+import { useAction } from '../ui/useAction'
 
 export function SettingsScreen() {
   const { settings, bancales, caminos, rutas, diario, osm } = useData()
   const toast = useToast()
+  const { busy, run } = useAction()
   const [restore, setRestore] = useState<Backup | null>(null)
 
   const exportar = async () => {
@@ -108,7 +110,7 @@ export function SettingsScreen() {
         <h2>Tus datos</h2>
       </div>
       <section className="card flush list">
-        <button className="list-item" onClick={() => void exportar()}>
+        <button className="list-item" disabled={busy} onClick={() => void run(exportar)}>
           <span className="tile sm none">
             <Download size={16} />
           </span>
@@ -162,23 +164,25 @@ export function SettingsScreen() {
           </p>
           <button
             className="btn primary block"
-            onClick={async () => {
+            disabled={busy}
+            onClick={() => void run(async () => {
               await importBackup(restore, 'fusionar')
               setRestore(null)
               toast.show('Copia añadida')
-            }}
+            })}
           >
             Añadir a lo que tengo
           </button>
           <button
             className="btn danger block"
-            onClick={async () => {
+            disabled={busy}
+            onClick={() => void run(async () => {
               const ok = await toast.confirm({ title: '¿Reemplazar todo?', message: 'Se borrarán los bancales, caminos, rutas y apuntes actuales y se pondrán los de la copia.', confirmLabel: 'Reemplazar', danger: true })
               if (!ok) return
               await importBackup(restore, 'reemplazar')
               setRestore(null)
               toast.show('Copia restaurada')
-            }}
+            })}
           >
             Reemplazar todo
           </button>
@@ -200,14 +204,15 @@ function OfflineSection() {
     void espacio().then(setUso)
   }, [d?.estado, zonas.length])
 
-  const lanzar = async (fn: () => Promise<{ estado: string; fallos: number }>, aviso: string) => {
+  const lanzar = async (fn: () => Promise<{ estado: string; fallos: number; hechas: number; total: number }>, aviso: string) => {
     if (!navigator.onLine) {
       toast.show('Necesitas conexión (mejor wifi) para descargar')
       return
     }
     try {
       const r = await fn()
-      if (r.estado === 'terminada') toast.show(r.fallos ? `${aviso} (${r.fallos} teselas sin imagen)` : aviso)
+      if (r.estado === 'error') toast.show('No se ha podido guardar el mapa. Revisa el espacio disponible y vuelve a intentarlo.')
+      else if (r.estado === 'terminada') toast.show(r.fallos ? `Descarga incompleta: ${r.hechas} de ${r.total} imágenes. Vuelve a descargar para completar las que faltan.` : aviso)
     } catch (e) {
       toast.show((e as Error).message)
     }
@@ -224,7 +229,7 @@ function OfflineSection() {
     if (ok) await lanzar(() => descargarComarca(id, nivel), `${c.nombre} disponible sin conexión`)
   }
 
-  const nDetalle = tilesDetalle(bancales, caminos).length
+  const nDetalle = useMemo(() => tilesDetalle(bancales, caminos).length, [bancales, caminos])
 
   if (!hasCacheApi()) {
     return (
@@ -263,7 +268,8 @@ function OfflineSection() {
       )}
       <section className="card flush list">
         {COMARCAS.map((c) => {
-          const hecho = (['detallado', 'basico'] as Nivel[]).find((n) => zonas.some((z) => z.id === `${c.id}-${n}`))
+          const hecho = (['detallado', 'basico'] as Nivel[]).find((n) => zonas.some((z) => z.id === `${c.id}-${n}` && z.guardadas === z.total))
+          const parcial = zonas.find((z) => z.id.startsWith(`${c.id}-`) && z.guardadas < z.total)
           return (
             <div key={c.id} className="list-item" style={{ flexWrap: 'wrap' }}>
               <span className="tile sm" style={{ '--c': 'var(--olive)' } as React.CSSProperties}>
@@ -271,7 +277,7 @@ function OfflineSection() {
               </span>
               <div className="grow">
                 <div className="primary-line">{c.nombre}</div>
-                <div className="secondary-line">{hecho ? `Guardada · nivel ${NIVELES[hecho].nombre.toLowerCase()}` : 'No descargada'}</div>
+                <div className="secondary-line">{hecho ? `Guardada · nivel ${NIVELES[hecho].nombre.toLowerCase()}` : parcial ? `Incompleta · ${parcial.guardadas} de ${parcial.total} imágenes` : 'No descargada'}</div>
               </div>
               <div className="row" style={{ gap: 6 }}>
                 {(Object.keys(NIVELES) as Nivel[]).map((n) => (

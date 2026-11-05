@@ -91,8 +91,12 @@ Apunta lo que haces en cada bancal: **poda, tratamiento, abono, riego, desbroce,
 
 La pestaña **Diario** muestra cada campaña (de septiembre a agosto): los kilos recogidos, los kilos por bancal y por olivo, y todos los apuntes por meses. En la lista de bancales se ve el último apunte de cada uno.
 
+Puedes elegir **Todos los bancales** o uno concreto en el selector. En la ficha de un bancal, **Ver todo** abre directamente su diario. Los kilos admiten decimales (por ejemplo, **125,5**). Los días de recogida cuentan fechas distintas; el rendimiento por olivo solo aparece si todos los bancales con cosecha tienen indicado su número de olivos.
+
 ## 10. Copias de seguridad
 
 En **Ajustes → Hacer copia de seguridad**, guarda el archivo en iCloud Drive o Google Drive. Incluye bancales, caminos, rutas y diario. Si cambias de móvil, usa **Restaurar copia**.
+
+Antes de restaurar, la app comprueba el contenido de la copia. Si está dañada o usa una versión incompatible, la rechaza y conserva tus datos actuales. Sigue admitiendo las copias de la versión 1, que no incluían diario.
 
 **Exportar todo a GPX** sirve para ver tus bancales y caminos en Google Earth o en otro GPS.

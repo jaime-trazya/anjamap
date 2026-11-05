@@ -65,7 +65,7 @@ export function BancalesScreen() {
         <>
           <div className="search">
             <Search size={19} />
-            <input className="input" type="search" placeholder="Buscar bancal, finca o variedad" value={q} onChange={(e) => setQ(e.target.value)} />
+            <input className="input" type="search" aria-label="Buscar bancal, finca o variedad" placeholder="Buscar bancal, finca o variedad" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
           <Segmented
             value={orden}

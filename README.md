@@ -24,6 +24,7 @@ Instrucciones de uso: **[GUIA_USO.md](GUIA_USO.md)**
 - **Diario de campo:**
   - Apuntes de poda, tratamiento, abono, riego, desbroce, recolección (con kilos) y visitas.
   - Se organiza por campañas, de septiembre a agosto, con los kilos por bancal y los kilos por olivo.
+  - Filtro por bancal, kilos con decimales y días de recogida sin duplicar fechas. El rendimiento por olivo solo se calcula con un censo completo de los bancales con cosecha.
 - **Sin conexión:**
   - Siempre funcionan sin datos el GPS, la flecha, las rutas por caminos (la red de OSM viaja con la app) y el diario.
   - El satélite se descarga por comarca (básico o detallado) y con máximo detalle alrededor de tus bancales y caminos.
