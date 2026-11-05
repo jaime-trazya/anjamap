@@ -4,6 +4,7 @@ import type { Bancal, Camino, Ruta } from '../db/db'
 import type { LatLon } from '../lib/geo'
 import type { Fix } from '../ui/position'
 import { COMARCAS } from '../domain/comarcas'
+import { osmLines, type OsmNet } from '../domain/osm'
 import { CAPAS, getTile, type Capa } from './tiles'
 
 /** Capa de teselas que lee primero de la caché del dispositivo (funciona sin conexión) */
@@ -59,7 +60,12 @@ function bancalIcon(b: Bancal, selected: boolean, showLabel: boolean) {
   })
 }
 
+const CAR_SVG =
+  '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>'
+
 const COMARCAS_BOUNDS = L.latLngBounds(COMARCAS.flatMap((c) => c.anillos.flat()))
+/** La red de OSM se dibuja a partir de este zoom */
+const RED_ZOOM = 14
 
 export interface MapViewProps {
   className?: string
@@ -67,10 +73,15 @@ export interface MapViewProps {
   bancales?: Bancal[]
   caminos?: Camino[]
   rutas?: Ruta[]
+  /** Red de pistas y sendas de OpenStreetMap */
+  red?: OsmNet | null
   /** Ruta destacada (la que se está siguiendo) */
   route?: LatLon[] | null
   /** Línea en edición (grabando o dibujando) */
   draft?: LatLon[] | null
+  coche?: LatLon | null
+  /** Destino que no es un bancal (punto del mapa) */
+  punto?: LatLon | null
   user?: Fix | null
   heading?: number | null
   follow?: boolean
@@ -82,12 +93,11 @@ export interface MapViewProps {
   showComarcas?: boolean
   interactive?: boolean
   onBancalClick?: (b: Bancal) => void
-  onCaminoClick?: (c: Camino) => void
+  onCocheClick?: () => void
   onLongPress?: (p: LatLon) => void
   onTap?: (p: LatLon) => void
   onMove?: (center: LatLon, zoom: number) => void
   onUserPan?: () => void
-  onReady?: (map: L.Map | null) => void
 }
 
 export function MapView(props: MapViewProps) {
@@ -96,6 +106,7 @@ export function MapView(props: MapViewProps) {
   const layers = useRef<{
     tiles: L.Layer[]
     comarcas: L.LayerGroup
+    red: L.LayerGroup
     caminos: L.LayerGroup
     rutas: L.LayerGroup
     route: L.LayerGroup
@@ -136,6 +147,7 @@ export function MapView(props: MapViewProps) {
     layers.current = {
       tiles: [],
       comarcas: L.layerGroup([], { pane: pane('comarcas', 380) }).addTo(map),
+      red: L.layerGroup([], { pane: pane('red', 390) }),
       caminos: L.layerGroup([], { pane: pane('caminos', 400) }).addTo(map),
       rutas: L.layerGroup([], { pane: pane('rutas', 410) }).addTo(map),
       route: L.layerGroup([], { pane: pane('route', 420) }).addTo(map),
@@ -151,13 +163,11 @@ export function MapView(props: MapViewProps) {
       cb.current.onMove?.([c.lat, c.lng], map.getZoom())
     })
     mapRef.current = map
-    cb.current.onReady?.(map)
     // El contenedor puede cambiar de tamaño (barra de pestañas, hojas)
     const ro = new ResizeObserver(() => map.invalidateSize())
     ro.observe(el.current!)
     return () => {
       ro.disconnect()
-      cb.current.onReady?.(null)
       map.remove()
       mapRef.current = null
       layers.current = null
@@ -190,16 +200,41 @@ export function MapView(props: MapViewProps) {
     }
   }, [props.showComarcas])
 
+  // Red de OSM: tres líneas múltiples en un lienzo, solo con zoom suficiente
+  useEffect(() => {
+    const ls = layers.current
+    const map = mapRef.current
+    if (!ls || !map) return
+    ls.red.clearLayers()
+    if (!props.red) {
+      map.removeLayer(ls.red)
+      return
+    }
+    const lines = osmLines(props.red)
+    const renderer = L.canvas({ pane: 'red', padding: 0.3 })
+    const base = { pane: 'red', renderer, interactive: false, lineCap: 'round' as const, lineJoin: 'round' as const, smoothFactor: 1.5 }
+    L.polyline(lines[2], { ...base, color: '#ffffff', weight: 2.5, opacity: 0.55 }).addTo(ls.red)
+    L.polyline(lines[1], { ...base, color: '#ffffff', weight: 2, opacity: 0.45 }).addTo(ls.red)
+    L.polyline(lines[0], { ...base, color: '#fff0b8', weight: 2, opacity: 0.75, dashArray: '5 5' }).addTo(ls.red)
+    const sync = () => {
+      if (map.getZoom() >= RED_ZOOM) ls.red.addTo(map)
+      else map.removeLayer(ls.red)
+    }
+    sync()
+    map.on('zoomend', sync)
+    return () => {
+      map.off('zoomend', sync)
+    }
+  }, [props.red])
+
   useEffect(() => {
     const ls = layers.current
     if (!ls) return
     ls.caminos.clearLayers()
     for (const c of props.caminos ?? []) {
       const dash = c.tipo === 'senda' ? '7 7' : c.tipo === 'atajo' ? '2 7' : undefined
-      L.polyline(c.puntos, { pane: 'caminos', color: '#1b1d1f', weight: 7, opacity: 0.35, interactive: false }).addTo(ls.caminos)
-      const line = L.polyline(c.puntos, { pane: 'caminos', color: '#fff3c4', weight: 3.5, opacity: 0.95, dashArray: dash, lineCap: 'round' })
-      if (cb.current.onCaminoClick) line.on('click', () => cb.current.onCaminoClick?.(c))
-      line.addTo(ls.caminos)
+      L.polyline(c.puntos, { pane: 'caminos', color: '#1c1f15', weight: 7, opacity: 0.4, interactive: false }).addTo(ls.caminos)
+      L.polyline(c.puntos, { pane: 'caminos', color: '#ffe680', weight: 3.5, opacity: 1, dashArray: dash, lineCap: 'round', interactive: false }).addTo(ls.caminos)
     }
   }, [props.caminos])
 
@@ -208,7 +243,7 @@ export function MapView(props: MapViewProps) {
     if (!ls) return
     ls.rutas.clearLayers()
     for (const r of props.rutas ?? []) {
-      L.polyline(r.puntos, { pane: 'rutas', color: '#b9d97a', weight: 3, opacity: 0.85, dashArray: '1 6', lineCap: 'round', interactive: false }).addTo(ls.rutas)
+      L.polyline(r.puntos, { pane: 'rutas', color: '#c5e07e', weight: 3.5, opacity: 0.95, dashArray: '1 7', lineCap: 'round', interactive: false }).addTo(ls.rutas)
     }
   }, [props.rutas])
 
@@ -217,8 +252,8 @@ export function MapView(props: MapViewProps) {
     if (!ls) return
     ls.route.clearLayers()
     if (props.route && props.route.length > 1) {
-      L.polyline(props.route, { pane: 'route', color: '#ffffff', weight: 9, opacity: 0.9, interactive: false }).addTo(ls.route)
-      L.polyline(props.route, { pane: 'route', color: '#5b7f1f', weight: 5, opacity: 1, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(ls.route)
+      L.polyline(props.route, { pane: 'route', color: '#ffffff', weight: 10, opacity: 0.95, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(ls.route)
+      L.polyline(props.route, { pane: 'route', color: '#e0531b', weight: 5.5, opacity: 1, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(ls.route)
     }
   }, [props.route])
 
@@ -229,13 +264,15 @@ export function MapView(props: MapViewProps) {
     const d = props.draft
     if (d && d.length) {
       if (d.length > 1) {
-        L.polyline(d, { pane: 'draft', color: '#1b1d1f', weight: 8, opacity: 0.4, interactive: false }).addTo(ls.draft)
-        L.polyline(d, { pane: 'draft', color: '#ffb547', weight: 4, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(ls.draft)
+        L.polyline(d, { pane: 'draft', color: '#1c1f15', weight: 8, opacity: 0.45, interactive: false }).addTo(ls.draft)
+        L.polyline(d, { pane: 'draft', color: '#ff9a3c', weight: 4, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(ls.draft)
       }
-      for (const p of [d[0], d[d.length - 1]]) L.circleMarker(p, { pane: 'draft', radius: 5, color: '#1b1d1f', weight: 2, fillColor: '#ffb547', fillOpacity: 1, interactive: false }).addTo(ls.draft)
+      for (const p of [d[0], d[d.length - 1]]) L.circleMarker(p, { pane: 'draft', radius: 5, color: '#1c1f15', weight: 2, fillColor: '#ff9a3c', fillOpacity: 1, interactive: false }).addTo(ls.draft)
     }
   }, [props.draft])
 
+  const cocheKey = props.coche ? props.coche.join(',') : ''
+  const puntoKey = props.punto ? props.punto.join(',') : ''
   useEffect(() => {
     const ls = layers.current
     const map = mapRef.current
@@ -248,13 +285,22 @@ export function MapView(props: MapViewProps) {
         m.on('click', () => cb.current.onBancalClick?.(b))
         m.addTo(ls.bancales)
       }
+      if (props.coche) {
+        const m = L.marker(props.coche, { pane: 'bancales', keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: `<div class="car-pin">${CAR_SVG}</div>` }) })
+        m.on('click', () => cb.current.onCocheClick?.())
+        m.addTo(ls.bancales)
+      }
+      if (props.punto) {
+        L.marker(props.punto, { pane: 'bancales', interactive: false, icon: bancalIcon({ id: 'punto', nombre: 'Destino', color: '#e0531b' } as Bancal, true, true) }).addTo(ls.bancales)
+      }
     }
     draw()
     map.on('zoomend', draw)
     return () => {
       map.off('zoomend', draw)
     }
-  }, [props.bancales, props.selectedId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.bancales, props.selectedId, cocheKey, puntoKey])
 
   useEffect(() => {
     const ls = layers.current

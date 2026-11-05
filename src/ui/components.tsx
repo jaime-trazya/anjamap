@@ -145,3 +145,14 @@ export function MiniArrow({ deg, size = 16 }: { deg: number; size?: number }) {
     </svg>
   )
 }
+
+/** Cifra con etiqueta para las rejillas de datos */
+export function Stat({ label, value, meta }: { label: string; value: ReactNode; meta?: ReactNode }) {
+  return (
+    <div className="stat">
+      <div className="eyebrow">{label}</div>
+      <div className="figure">{value}</div>
+      {meta && <div className="meta">{meta}</div>}
+    </div>
+  )
+}

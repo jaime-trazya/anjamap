@@ -53,3 +53,9 @@ export function routeToDest(points: LatLon[], dest: LatLon): LatLon[] {
   if (!points.length) return [dest]
   return distance(points[points.length - 1], dest) > 5 ? [...points, dest] : points
 }
+
+/** Siguiente indicación por delante de donde vas (`along` = metros recorridos sobre la ruta) */
+export function nextStep<T extends { along: number }>(steps: T[], along: number): { paso: T; dist: number } | null {
+  for (const p of steps) if (p.along > along + 3) return { paso: p, dist: p.along - along }
+  return null
+}

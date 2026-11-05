@@ -9,7 +9,7 @@ import { useToast } from '../ui/toast'
 import { navigate } from '../ui/router'
 import { autoDetalle } from '../ui/offline'
 import type { NewBancalOpts } from '../ui/editor'
-import { COLORES } from '../domain/constants'
+import { COLORES, VARIEDADES } from '../domain/constants'
 
 type Captura = { estado: 'buscando'; acc: number | null; n: number } | { estado: 'error'; msg: string } | null
 
@@ -17,10 +17,12 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
   const { bancales, rutas, settings } = useData()
   const toast = useToast()
   const existing = id ? bancales.find((b) => b.id === id) : undefined
-  const [nombre, setNombre] = useState(existing?.nombre ?? `Bancal ${bancales.length + 1}`)
-  const [finca, setFinca] = useState(existing?.finca ?? '')
+  const [nombre, setNombre] = useState(existing?.nombre ?? opts?.nombre ?? `Bancal ${bancales.length + 1}`)
+  const [finca, setFinca] = useState(existing?.finca ?? opts?.finca ?? '')
+  const [olivos, setOlivos] = useState(existing?.olivos ? String(existing.olivos) : '')
+  const [variedad, setVariedad] = useState(existing?.variedad ?? '')
   const [nota, setNota] = useState(existing?.nota ?? '')
-  const [color, setColor] = useState(existing?.color ?? COLORES[0].color)
+  const [color, setColor] = useState(existing?.color ?? opts?.color ?? COLORES[0].color)
   const [point, setPoint] = useState<LatLon | null>(existing ? [existing.lat, existing.lon] : (opts?.point ?? null))
   const [precision, setPrecision] = useState<number | null>(existing ? existing.precision : (opts?.precision ?? null))
   const autoGps = !!opts?.gps && !existing
@@ -54,6 +56,8 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
       nombre: nombre.trim() || 'Bancal',
       finca: finca.trim() || undefined,
       nota: nota.trim() || undefined,
+      olivos: Number(olivos) > 0 ? Math.round(Number(olivos)) : undefined,
+      variedad: variedad.trim() || undefined,
       lat: point[0],
       lon: point[1],
       precision,
@@ -104,7 +108,7 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
     >
       <section className="card stack" style={{ gap: 10 }}>
         <div className="row">
-          <span className="tile" style={{ '--c': color } as React.CSSProperties}>
+          <span className="tile solid" style={{ '--c': color } as React.CSSProperties}>
             <MapPin size={19} />
           </span>
           <div className="grow">
@@ -132,7 +136,7 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
             {captura.msg}. Revisa que la app tenga permiso de ubicación.
           </Notice>
         )}
-        <button className="btn small" onClick={capturar} disabled={captura?.estado === 'buscando'}>
+        <button className="btn small block" onClick={capturar} disabled={captura?.estado === 'buscando'}>
           <LocateFixed size={16} /> {point ? 'Usar mi posición actual' : 'Tomar posición GPS'}
         </button>
         <p className="meta">Para más precisión, quédate quieto en el bancal unos segundos mientras se afina.</p>
@@ -151,9 +155,24 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
           ))}
         </datalist>
       </label>
+      <div className="form-grid">
+        <label className="field">
+          <span>Olivos</span>
+          <input className="input num" inputMode="numeric" value={olivos} onChange={(e) => setOlivos(e.target.value.replace(/D/g, ''))} placeholder="Opcional" />
+        </label>
+        <label className="field">
+          <span>Variedad</span>
+          <input className="input" value={variedad} onChange={(e) => setVariedad(e.target.value)} list="variedades" placeholder="Opcional" />
+          <datalist id="variedades">
+            {[...new Set([...bancales.map((b) => b.variedad).filter(Boolean), ...VARIEDADES])].map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        </label>
+      </div>
       <label className="field">
         <span>Nota</span>
-        <textarea className="textarea" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Nº de olivos, variedad, acceso por la puerta verde…" />
+        <textarea className="textarea" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Por dónde se entra, riego, lindes…" />
       </label>
       <div className="field">
         <span className="field-label">Color</span>

@@ -68,7 +68,7 @@ export function LineDetail({ kind, id }: { kind: 'camino' | 'ruta'; id: string }
       </section>
 
       {bancal && (
-        <button className="btn accent block big" onClick={() => navigate(`/ir/${bancal.id}?ruta=${item.id}`)}>
+        <button className="btn go block big" onClick={() => navigate(`/ir/${bancal.id}?ruta=${item.id}`)}>
           <Navigation size={20} /> Seguir esta ruta
         </button>
       )}

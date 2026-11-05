@@ -1,30 +1,49 @@
 # Anjamap · Bancales
 
-PWA para llegar andando a los bancales de olivos de **la Canal de Navarrés** y **La Costera**. Funciona sin conexión. No tiene backend: todo se guarda en el móvil (IndexedDB) y se instala con «Añadir a pantalla de inicio». Usa el mismo estilo y la misma base técnica que [Claudio](https://github.com/jaime-trazya/claudio).
+PWA para llegar andando a los bancales de olivos de **la Canal de Navarrés** y **La Costera**, y llevar su diario de campo. Funciona sin conexión. No tiene backend: todo se guarda en el móvil (IndexedDB) y se instala con «Añadir a pantalla de inicio».
 
 Instrucciones de uso: **[GUIA_USO.md](GUIA_USO.md)**
 
 ## Funciones
 
-- **Bancales:** se guardan con el GPS estando en el bancal (promedia varias lecturas para ganar precisión), marcándolos en el satélite o importándolos de un GPX. Cada uno lleva nombre, finca o partida, nota y color.
-- **Ir al bancal:** una flecha que apunta hacia dónde ir (con la brújula del móvil o, si no la hay, con el rumbo al andar), la distancia que falta y el tiempo andando. Abajo, el mapa sigue tu posición. Avisa al llegar.
+- **Bancales:**
+  - Se guardan de tres formas: con el GPS estando en el bancal (promedia varias lecturas para ganar precisión), marcándolos en el satélite o importándolos de un GPX.
+  - Cada uno lleva nombre, finca o partida, número de olivos, variedad, nota y color.
+- **Ir al bancal:**
+  - Una brújula con una flecha naranja que apunta hacia dónde ir, la distancia que falta y el tiempo andando.
+  - En los cruces da indicaciones: «En 40 m, gira a la izquierda». El móvil vibra al acercarse a cada giro y al llegar.
+  - Abajo, el mapa sigue tu posición.
 - **Tres formas de ir:**
-  - *Recomendada:* calcula la ruta por la red de caminos y penaliza el campo a través (×2,5). Se recalcula con cada lectura del GPS.
-  - *Directa:* en línea recta.
+  - *Recomendada:* por la red de pistas y sendas, penalizando el campo a través (×2,5). Se recalcula con cada lectura del GPS.
+  - *Línea recta.*
   - *Rutas guardadas:* las que has grabado andando o dibujado para ese bancal.
-- **Caminos:** se graban andando, se dibujan punto a punto con una cruz en el centro del mapa o se importan de GPX (por ejemplo, de Wikiloc). Los cruces y los extremos cercanos (12 m) se unen solos en una red.
+- **Caminos de OpenStreetMap ya cargados:** unos 31.000 tramos de pistas, sendas y calles de las dos comarcas. Los caminos propios (grabados, dibujados o de GPX) se unen solos a esa red en los cruces y en los extremos cercanos (12 m).
+- **Volver al coche:** se marca dónde aparcas y te lleva de vuelta con la misma flecha.
+- **Ir a cualquier punto:** mantén pulsado el mapa y elige «Ir aquí», sin necesidad de guardarlo como bancal.
+- **Compartir un bancal:** genera un enlace (para WhatsApp, por ejemplo). Quien lo abre puede guardarlo en su Anjamap o ir directamente.
+- **Diario de campo:**
+  - Apuntes de poda, tratamiento, abono, riego, desbroce, recolección (con kilos) y visitas.
+  - Se organiza por campañas, de septiembre a agosto, con los kilos por bancal y los kilos por olivo.
 - **Sin conexión:**
-  - El GPS, la flecha y la distancia nunca necesitan datos.
-  - Las imágenes del mapa se descargan por comarca en dos niveles: básico (zoom ≤15) o detallado (zoom ≤16).
-  - El detalle máximo (zoom hasta 19) se descarga solo alrededor de los bancales y a lo largo de los caminos.
-  - Todo lo que se ve con conexión también se guarda.
-- **Copia de seguridad** en JSON (para iCloud Drive o Google Drive) y exportación de todo a GPX.
-- Modo claro y oscuro.
+  - Siempre funcionan sin datos el GPS, la flecha, las rutas por caminos (la red de OSM viaja con la app) y el diario.
+  - El satélite se descarga por comarca (básico o detallado) y con máximo detalle alrededor de tus bancales y caminos.
+- **Copia de seguridad** en JSON (bancales, caminos, rutas y diario) y exportación a GPX.
+- Modo claro y modo oscuro.
+
+## Diseño
+
+Es un «cuaderno de campo»:
+- Papel cálido y tinta verde casi negra.
+- Verde oliva para la marca.
+- Naranja de señalización solo en lo que hay que ver de un vistazo al sol: la flecha, «Ir» y la ruta en el mapa.
+- Tipografía Barlow para leer y Barlow Condensed para títulos y cifras. Se incluyen en la app, así que también se ven sin conexión.
 
 ## Fuentes de datos
 
 - Ortofoto **PNOA** y mapa base del **Instituto Geográfico Nacional** (WMTS, CC BY 4.0). Las teselas se piden con CORS y se guardan con la Cache API (`anjamap-teselas`).
-- Límites de las dos comarcas: **OpenStreetMap** (relaciones 1691747 y 1691752, ODbL), simplificados en [src/domain/comarcas.ts](src/domain/comarcas.ts).
+- Pistas, sendas, calles y límites de las comarcas: **© colaboradores de OpenStreetMap** (ODbL).
+  - Red de caminos: [public/caminos-osm.json](public/caminos-osm.json), generada con `node scripts/generar-caminos-osm.mjs`.
+  - Límites: relaciones 1691747 y 1691752, en [src/domain/comarcas.ts](src/domain/comarcas.ts).
 
 ## Desarrollo
 
@@ -35,6 +54,7 @@ npm test           # Vitest
 npm run lint       # ESLint
 npm run build      # build de producción en dist/
 npm run iconos     # regenera iconos y pantallas de inicio (necesita Playwright)
+node scripts/generar-caminos-osm.mjs   # vuelve a bajar la red de caminos de OSM
 ```
 
 El GPS y la brújula solo funcionan con HTTPS (o en `localhost`).
@@ -43,12 +63,15 @@ El GPS y la brújula solo funcionan con HTTPS (o en `localhost`).
 
 | Carpeta | Qué hay |
 | --- | --- |
-| `src/lib/geo.ts` | Distancias, rumbos, proyección local y simplificación de recorridos |
-| `src/domain/graph.ts` | Red de caminos y ruta recomendada (Dijkstra) |
-| `src/domain/nav.ts` | Seguimiento de la ruta: hacia dónde apunta la flecha y cuánto falta |
+| `src/lib/` | Distancias, rumbos, proyección local, simplificación y fechas |
+| `src/domain/graph.ts` | Red de caminos (OSM y propios), ruta recomendada (A*) e indicaciones de giro |
+| `src/domain/nav.ts` | Seguimiento de la ruta: hacia dónde apunta la flecha, cuánto falta y el siguiente giro |
+| `src/domain/osm.ts` | Lectura de la red de OpenStreetMap |
 | `src/map/` | Capa de Leaflet con caché sin conexión y descargas por zona |
-| `src/db/db.ts` | Base de datos local (Dexie), ajustes y copia de seguridad |
+| `src/db/db.ts` | Base de datos local (Dexie, versión 2 con el diario), ajustes y copia de seguridad |
 | `src/screens/` | Pantallas |
+
+La red de OSM se monta (unos 114.000 nodos) solo cuando una pantalla calcula rutas, después de pintar. En un ordenador tarda unos 0,4 s; cada ruta, unos 10 ms.
 
 ## Publicación
 

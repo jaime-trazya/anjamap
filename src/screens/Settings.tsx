@@ -12,7 +12,7 @@ import { useToast } from '../ui/toast'
 import { Segmented, Sheet, Switch } from '../ui/components'
 
 export function SettingsScreen() {
-  const { settings, bancales, caminos, rutas } = useData()
+  const { settings, bancales, caminos, rutas, diario, osm } = useData()
   const toast = useToast()
   const [restore, setRestore] = useState<Backup | null>(null)
 
@@ -42,12 +42,17 @@ export function SettingsScreen() {
 
   return (
     <main className="screen">
-      <h1 className="title">Ajustes</h1>
+      <div className="head">
+        <div>
+          <div className="eyebrow">Anjamap</div>
+          <h1 className="title">Ajustes</h1>
+        </div>
+      </div>
 
       <OfflineSection />
 
-      <div className="section-head">
-        <h2 className="section-title">Mapa</h2>
+      <div className="section">
+        <h2>Mapa</h2>
       </div>
       <section className="card stack">
         <div className="field">
@@ -61,6 +66,21 @@ export function SettingsScreen() {
             ]}
             label="Capa del mapa"
           />
+        </div>
+        <div className="check-row">
+          <div className="grow">
+            <div>Caminos de OpenStreetMap</div>
+            <div className="meta">
+              {osm.estado === 'listo' && osm.net
+                ? `${osm.net.edges.length.toLocaleString('es-ES')} tramos de pistas, sendas y calles de las dos comarcas para recomendar rutas.`
+                : osm.estado === 'cargando'
+                  ? 'Cargando…'
+                  : osm.estado === 'error'
+                    ? 'No se han podido cargar.'
+                    : 'Desactivados: solo se usan tus caminos.'}
+            </div>
+          </div>
+          <Switch checked={settings.caminosOsm} onChange={(v) => void setSetting('caminosOsm', v)} label="Caminos de OpenStreetMap" />
         </div>
         <div className="check-row">
           <div className="grow">
@@ -84,8 +104,8 @@ export function SettingsScreen() {
         </div>
       </section>
 
-      <div className="section-head">
-        <h2 className="section-title">Tus datos</h2>
+      <div className="section">
+        <h2>Tus datos</h2>
       </div>
       <section className="card flush list">
         <button className="list-item" onClick={() => void exportar()}>
@@ -121,21 +141,24 @@ export function SettingsScreen() {
         </a>
       </section>
       <p className="meta" style={{ padding: '0 4px' }}>
-        {bancales.length} bancales · {caminos.length} caminos · {rutas.length} rutas. Todo se guarda solo en este teléfono, sin servidor ni cuentas.
+        {bancales.length} bancales · {caminos.length} caminos · {rutas.length} rutas · {diario.length} apuntes. Todo se guarda solo en este teléfono, sin servidor ni cuentas.
       </p>
 
-      <div className="section-head">
-        <h2 className="section-title">Fuentes</h2>
+      <div className="section">
+        <h2>Fuentes</h2>
       </div>
       <section className="card stack" style={{ gap: 6 }}>
         <p className="small muted">Imagen de satélite: PNOA cedido por © Instituto Geográfico Nacional (CC BY 4.0). Mapa base: © Instituto Geográfico Nacional.</p>
-        <p className="small muted">Límites de las comarcas: © colaboradores de OpenStreetMap (ODbL).</p>
+        <p className="small muted">
+          Pistas, sendas y límites de las comarcas: © colaboradores de OpenStreetMap (ODbL)
+          {osm.net?.fecha ? `, datos del ${new Date(osm.net.fecha).toLocaleDateString('es-ES')}` : ''}.
+        </p>
       </section>
 
       {restore && (
         <Sheet title="Restaurar copia" onClose={() => setRestore(null)}>
           <p className="muted">
-            La copia del {new Date(restore.fecha).toLocaleDateString('es-ES')} tiene {restore.bancales.length} bancales, {restore.caminos.length} caminos y {restore.rutas.length} rutas.
+            La copia del {new Date(restore.fecha).toLocaleDateString('es-ES')} tiene {restore.bancales.length} bancales, {restore.caminos.length} caminos, {restore.rutas.length} rutas y {restore.diario?.length ?? 0} apuntes.
           </p>
           <button
             className="btn primary block"
@@ -150,7 +173,7 @@ export function SettingsScreen() {
           <button
             className="btn danger block"
             onClick={async () => {
-              const ok = await toast.confirm({ title: '¿Reemplazar todo?', message: 'Se borrarán los bancales, caminos y rutas actuales y se pondrán los de la copia.', confirmLabel: 'Reemplazar', danger: true })
+              const ok = await toast.confirm({ title: '¿Reemplazar todo?', message: 'Se borrarán los bancales, caminos, rutas y apuntes actuales y se pondrán los de la copia.', confirmLabel: 'Reemplazar', danger: true })
               if (!ok) return
               await importBackup(restore, 'reemplazar')
               setRestore(null)
@@ -213,8 +236,8 @@ function OfflineSection() {
 
   return (
     <>
-      <div className="section-head">
-        <h2 className="section-title">Mapa sin conexión</h2>
+      <div className="section">
+        <h2>Mapa sin conexión</h2>
       </div>
       {d && (descargando || d.estado !== 'terminada') && (
         <section className="card stack" style={{ gap: 10 }}>
@@ -243,7 +266,7 @@ function OfflineSection() {
           const hecho = (['detallado', 'basico'] as Nivel[]).find((n) => zonas.some((z) => z.id === `${c.id}-${n}`))
           return (
             <div key={c.id} className="list-item" style={{ flexWrap: 'wrap' }}>
-              <span className="tile sm" style={{ '--c': '#5b7f1f' } as React.CSSProperties}>
+              <span className="tile sm" style={{ '--c': 'var(--olive)' } as React.CSSProperties}>
                 <CloudDownload size={16} />
               </span>
               <div className="grow">

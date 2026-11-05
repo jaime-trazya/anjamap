@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { bearing, closestOnPath, distance, formatDistance, fromXY, pathLength, pointAlong, simplify, type LatLon } from '../lib/geo'
+import { readFileSync } from 'node:fs'
 import { buildGraph, directRoute, pathRoute, recommend } from './graph'
-import { navigate, routeToDest } from './nav'
+import { navigate, nextStep, routeToDest } from './nav'
+import { decodeOsm } from './osm'
 import { toGpx } from './gpx'
 import { COMARCAS } from './comarcas'
 import { tilesAround, tilesForPolygons } from '../map/tiles'
@@ -50,11 +52,8 @@ describe('red de caminos', () => {
 
   it('crea un nodo en el cruce de dos caminos', () => {
     const g = buildGraph([pista, senda])!
-    const cruce = g.nodes.findIndex((n) => Math.hypot(n.x - 200, n.y - 0) < 0.5 + Math.abs(g.nodes[0].x - 0))
-    expect(cruce).toBeGreaterThanOrEqual(0)
     // del cruce salen 4 tramos
-    const grados = g.adj.map((a) => a.length)
-    expect(Math.max(...grados)).toBe(4)
+    expect(Math.max(...g.deg)).toBe(4)
   })
 
   it('engancha el final de un camino que se queda a pocos metros de otro', () => {
@@ -77,9 +76,59 @@ describe('red de caminos', () => {
     expect(cerca.kind).toBe('directa')
   })
 
+  it('indica los giros en los cruces', () => {
+    // Pista recta hacia el este con un ramal al norte en x=200; el bancal está al norte del ramal
+    const este = [m(0, 0), m(400, 0)]
+    const ramal = [m(200, 0), m(200, 300)]
+    const g = buildGraph([este, ramal])
+    const r = recommend(g, m(0, 0), m(200, 300))
+    expect(r.kind).toBe('caminos')
+    expect(r.steps.map((p) => p.giro)).toEqual(['izquierda'])
+    expect(r.steps[0].along).toBeCloseTo(200, -1)
+    expect(nextStep(r.steps, 150)!.dist).toBeCloseTo(50, -1)
+    expect(nextStep(r.steps, 210)).toBeNull()
+  })
+
+  it('avisa de dejar el camino si el bancal queda lejos de él', () => {
+    const g = buildGraph([[m(0, 0), m(600, 0)]])
+    const r = recommend(g, m(0, 0), m(600, 40))
+    expect(r.kind).toBe('caminos')
+    expect(r.steps.at(-1)!.giro).toBe('dejar')
+  })
+
   it('sin caminos, la ruta es directa', () => {
     expect(recommend(null, m(0, 0), m(100, 0)).kind).toBe('directa')
     expect(directRoute(m(0, 0), m(100, 0)).length).toBeCloseTo(100, 0)
+  })
+})
+
+describe('caminos de OpenStreetMap', () => {
+  const net = decodeOsm(JSON.parse(readFileSync(new URL('../../public/caminos-osm.json', import.meta.url), 'utf8')))
+
+  it('la red cubre las dos comarcas', () => {
+    expect(net.edges.length).toBeGreaterThan(10000)
+    const lats = net.nodes.map((p) => p[0])
+    expect(Math.min(...lats)).toBeLessThan(38.95)
+    expect(Math.max(...lats)).toBeGreaterThan(39.05)
+  })
+
+  it('calcula rutas por la red real y se une con los caminos propios', () => {
+    const t0 = performance.now()
+    const propio = [[39.1045, -0.6905], [39.1052, -0.6898]] as LatLon[]
+    const g = buildGraph([propio], net)!
+    const build = performance.now() - t0
+    // De Navarrés (pueblo) a un punto del campo a unos 2 km
+    const from: LatLon = [39.1012, -0.6957]
+    const to: LatLon = [39.0885, -0.7158]
+    const t1 = performance.now()
+    const r = recommend(g, from, to)
+    const route = performance.now() - t1
+    expect(r.kind).toBe('caminos')
+    expect(r.length).toBeGreaterThan(distance(from, to))
+    expect(r.length).toBeLessThan(distance(from, to) * 2)
+    expect(build).toBeLessThan(4000)
+    expect(route).toBeLessThan(500)
+    console.log(`red: ${g.x.length} nodos, ${g.ea.length} tramos, construida en ${build.toFixed(0)} ms; ruta ${r.length.toFixed(0)} m con ${r.steps.length} indicaciones (${r.steps.map((p) => p.giro).join(', ')}) en ${route.toFixed(1)} ms`)
   })
 })
 

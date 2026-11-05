@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronRight, FileUp, Footprints, PenLine, Route as RouteIcon, Waypoints } from 'lucide-react'
+import { ChevronRight, FileUp, Footprints, Map as MapIcon, PenLine, Route as RouteIcon, Waypoints } from 'lucide-react'
 import { db, uid, type Bancal, type Camino } from '../db/db'
 import { formatDistance, pathLength, simplify } from '../lib/geo'
 import { parseGpx, type GpxData } from '../domain/gpx'
@@ -13,7 +13,7 @@ import { COLORES } from '../domain/constants'
 const TIPO_LABEL = { pista: 'Pista', senda: 'Senda', atajo: 'Atajo' } as const
 
 export function CaminosScreen() {
-  const { caminos, rutas, bancales } = useData()
+  const { caminos, rutas, bancales, settings, osm } = useData()
   const [tab, setTab] = useState<'caminos' | 'rutas'>('caminos')
   const [gpx, setGpx] = useState<{ name: string; data: GpxData } | null>(null)
   const toast = useToast()
@@ -32,12 +32,30 @@ export function CaminosScreen() {
 
   return (
     <main className="screen">
-      <div className="title-row">
+      <div className="head">
         <div>
+          <div className="eyebrow">La ruta recomendada va por aquí</div>
           <h1 className="title">Caminos</h1>
-          <div className="title-sub">La ruta recomendada va por estos caminos</div>
         </div>
       </div>
+
+      <section className="card row" style={{ alignItems: 'flex-start' }}>
+        <span className="tile" style={{ '--c': 'var(--olive)' } as React.CSSProperties}>
+          <MapIcon size={20} />
+        </span>
+        <div className="grow">
+          <div style={{ fontWeight: 700 }}>Pistas y sendas de OpenStreetMap</div>
+          <p className="small muted">
+            {!settings.caminosOsm
+              ? 'Desactivadas en Ajustes: solo se usan tus caminos.'
+              : osm.estado === 'listo' && osm.net
+                ? `${osm.net.edges.length.toLocaleString('es-ES')} tramos de la Canal de Navarrés y La Costera ya cargados, también sin conexión. Añade aquí los caminos que falten o los atajos que solo conoces tú.`
+                : osm.estado === 'error'
+                  ? 'No se han podido cargar. Vuelve a abrir la app con conexión.'
+                  : 'Cargando…'}
+          </p>
+        </div>
+      </section>
 
       <div className="actions three">
         <button className="action" onClick={() => navigate('/grabar?tipo=camino')}>
@@ -71,7 +89,7 @@ export function CaminosScreen() {
               .sort((a, b) => b.creado - a.creado)
               .map((c) => (
                 <a key={c.id} className="list-item tap" href={`#/camino/${c.id}`}>
-                  <span className="tile sm" style={{ '--c': '#8a6d1d' } as React.CSSProperties}>
+                  <span className="tile sm" style={{ '--c': '#a7801a' } as React.CSSProperties}>
                     <Waypoints size={16} />
                   </span>
                   <div className="grow">
@@ -86,8 +104,8 @@ export function CaminosScreen() {
           </section>
         ) : (
           <section className="card">
-            <Empty title="Sin caminos todavía">
-              Graba las pistas y sendas por las que vas a los bancales, o dibújalas sobre el satélite. Con ellas la app recomienda por dónde ir en vez de en línea recta.
+            <Empty title="Sin caminos propios">
+              Graba o dibuja las sendas y atajos que no salen en el mapa (entre bancales, por la acequia…). Se unen solos a las pistas de OpenStreetMap.
             </Empty>
           </section>
         )
@@ -99,7 +117,7 @@ export function CaminosScreen() {
               const b = bancales.find((x) => x.id === r.bancalId)
               return (
                 <a key={r.id} className="list-item tap" href={`#/ruta/${r.id}`}>
-                  <span className="tile sm" style={{ '--c': b?.color ?? '#5b7f1f' } as React.CSSProperties}>
+                  <span className="tile sm" style={{ '--c': b?.color ?? 'var(--olive)' } as React.CSSProperties}>
                     <RouteIcon size={16} />
                   </span>
                   <div className="grow">

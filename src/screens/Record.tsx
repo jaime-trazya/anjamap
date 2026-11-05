@@ -8,7 +8,7 @@ import { usePosition } from '../ui/position'
 import { useWakeLock } from '../ui/wakelock'
 import { back, navigate, routeParams } from '../ui/router'
 import { useToast } from '../ui/toast'
-import { Notice, Segmented, Sheet } from '../ui/components'
+import { Notice, Segmented, Sheet, Stat } from '../ui/components'
 import { TIPOS } from '../domain/constants'
 
 const DRAFT_KEY = 'anjamap-grabacion'
@@ -114,8 +114,11 @@ export function RecordScreen({ route }: { route: string }) {
           <Trash2 size={21} />
         </button>
         <div className="grow" style={{ textAlign: 'center' }}>
-          <div style={{ fontWeight: 600 }}>{tipo === 'ruta' ? `Grabando ruta${bancal ? ` a ${bancal.nombre}` : ''}` : 'Grabando camino'}</div>
-          <div className="meta">{paused ? 'En pausa' : 'Anda por el camino; se apunta solo'}</div>
+          <div className="t ellipsis">{tipo === 'ruta' ? `Grabando ruta${bancal ? ` a ${bancal.nombre}` : ''}` : 'Grabando camino'}</div>
+          <div className="meta row" style={{ justifyContent: 'center', gap: 6 }}>
+            {!paused && <span className="rec-dot" />}
+            {paused ? 'En pausa' : 'Grabando: anda por el camino'}
+          </div>
         </div>
         <span style={{ width: 44 }} />
       </header>
@@ -130,17 +133,9 @@ export function RecordScreen({ route }: { route: string }) {
             Actívalo en los ajustes del teléfono para poder grabar.
           </Notice>
         )}
-        <div className="kpis card flush">
-          <div className="kpi">
-            <div className="card-label">Distancia</div>
-            <div className="big-num">{formatDistance(len)}</div>
-            <div className="meta">{draft.puntos.length} puntos</div>
-          </div>
-          <div className="kpi">
-            <div className="card-label">Tiempo</div>
-            <div className="big-num">{mins} min</div>
-            <div className="meta">{fix ? `GPS ±${Math.round(fix.acc)} m${fix.acc > MAX_ACC ? ' (esperando más precisión)' : ''}` : 'Buscando GPS…'}</div>
-          </div>
+        <div className="stats">
+          <Stat label="Distancia" value={formatDistance(len)} meta={`${draft.puntos.length} puntos`} />
+          <Stat label="Tiempo" value={`${mins} min`} meta={fix ? `GPS ±${Math.round(fix.acc)} m${fix.acc > MAX_ACC ? ' (esperando más precisión)' : ''}` : 'Buscando GPS…'} />
         </div>
         <p className="meta">Mantén la app abierta y la pantalla encendida: con la app cerrada el teléfono no apunta el recorrido.</p>
         <div className="row">

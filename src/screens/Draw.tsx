@@ -78,7 +78,7 @@ export function DrawScreen({ route }: { route: string }) {
           <X size={24} />
         </button>
         <div className="grow" style={{ textAlign: 'center', minWidth: 0 }}>
-          <div className="ellipsis" style={{ fontWeight: 600 }}>{titulo}</div>
+          <div className="t ellipsis">{titulo}</div>
           <div className="meta">{isLine ? `${pts.length} puntos · ${formatDistance(pathLength(pts))}` : ' '}</div>
         </div>
         <span style={{ width: 44 }} />

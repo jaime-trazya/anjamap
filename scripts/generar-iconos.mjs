@@ -13,8 +13,8 @@ const { chromium } = createRequire(import.meta.url)('playwright')
 const ROOT = path.resolve(import.meta.dirname, '..')
 const PUB = path.join(ROOT, 'public')
 
-// Marca: un marcador de mapa blanco con una oliva dentro, sobre verde oliva.
-const mark = (size, { pad = 0, bg = '#5b7f1f', fg = '#ffffff', olive = '#3d5a12', leaf = '#a9cc6f', radius = 0.225 } = {}) => {
+// Marca: un marcador naranja con una oliva dentro, sobre tinta verde oscura.
+const mark = (size, { pad = 0, bg = '#1c1f15', fg = '#e0531b', olive = '#1c1f15', leaf = '#c5e07e', radius = 0.225 } = {}) => {
   const s = 512
   const k = (s - pad * 2) / 512
   const t = (v) => (pad + v * k).toFixed(1)
@@ -62,8 +62,8 @@ await png(icon(512, { pad: 90, radius: 0 }), 512, 512, path.join(PUB, 'icons/ico
 
 const links = []
 for (const scheme of ['light', 'dark']) {
-  const bg = scheme === 'light' ? '#f3f5f7' : '#0c0c0d'
-  const ink = scheme === 'light' ? '#5c6064' : '#a3a6ab'
+  const bg = scheme === 'light' ? '#f1eee5' : '#11130d'
+  const ink = scheme === 'light' ? '#4b5040' : '#b3b8a4'
   for (const [w, h, cw, ch, dpr] of SPLASH) {
     const name = `splash-${w}x${h}-${scheme}.png`
     const iconSize = Math.round(w * 0.24)

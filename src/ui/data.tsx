@@ -1,13 +1,14 @@
 import { useMemo, type ReactNode } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db, DEFAULT_SETTINGS, type Settings } from '../db/db'
-import { buildGraph } from '../domain/graph'
 import { DataCtx, type DataValue } from './useData'
+import { useOsm } from './osm'
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const bancales = useLiveQuery(() => db.bancales.toArray())
   const caminos = useLiveQuery(() => db.caminos.toArray())
   const rutas = useLiveQuery(() => db.rutas.toArray())
+  const diario = useLiveQuery(() => db.diario.orderBy('fecha').reverse().toArray())
   const ajustes = useLiveQuery(() => db.ajustes.toArray())
 
   const settings = useMemo<Settings>(() => {
@@ -16,18 +17,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return s as unknown as Settings
   }, [ajustes])
 
-  const graph = useMemo(() => buildGraph((caminos ?? []).map((c) => c.puntos)), [caminos])
+  const osm = useOsm(!!ajustes && settings.caminosOsm)
 
   const value = useMemo<DataValue>(
     () => ({
-      ready: !!(bancales && caminos && rutas && ajustes),
+      ready: !!(bancales && caminos && rutas && ajustes && diario),
       bancales: [...(bancales ?? [])].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true })),
       caminos: caminos ?? [],
       rutas: rutas ?? [],
+      diario: diario ?? [],
       settings,
-      graph,
+      osm,
     }),
-    [bancales, caminos, rutas, ajustes, settings, graph],
+    [bancales, caminos, rutas, diario, ajustes, settings, osm],
   )
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>
 }
