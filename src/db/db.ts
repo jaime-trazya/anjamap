@@ -67,6 +67,17 @@ export interface Zona {
   fecha: number
 }
 
+export interface Foto {
+  id: string
+  bancalId: string
+  nombre: string
+  /** Imagen reducida, lista para mostrar y transportar en una copia JSON. */
+  dataUrl: string
+  creado: number
+}
+
+export type Transporte = 'pie' | 'coche' | 'bici' | 'patinete'
+
 export interface Ajuste {
   clave: string
   valor: unknown
@@ -83,6 +94,7 @@ export class AnjamapDB extends Dexie {
   zonas!: Table<Zona, string>
   ajustes!: Table<Ajuste, string>
   diario!: Table<Apunte, string>
+  fotos!: Table<Foto, string>
 
   constructor(name = DB_NAME) {
     super(name)
@@ -94,6 +106,8 @@ export class AnjamapDB extends Dexie {
       ajustes: 'clave',
     })
     this.version(2).stores({ diario: 'id, bancalId, fecha' })
+    // Se conserva la tabla antigua por compatibilidad; la app ya no usa el diario.
+    this.version(3).stores({ fotos: 'id, bancalId, creado' })
   }
 }
 
@@ -126,6 +140,12 @@ export interface Settings {
   caminosOsm: boolean
   /** Dónde se dejó el coche */
   coche: { lat: number; lon: number; t: number } | null
+  transporte: Transporte
+  evitarPeajes: boolean
+  evitarAutopistas: boolean
+  voz: boolean
+  velocidadPatinete: number
+  servidorRutas: string
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -136,6 +156,12 @@ export const DEFAULT_SETTINGS: Settings = {
   vista: null,
   caminosOsm: true,
   coche: null,
+  transporte: 'pie',
+  evitarPeajes: false,
+  evitarAutopistas: false,
+  voz: false,
+  velocidadPatinete: 15,
+  servidorRutas: 'https://valhalla1.openstreetmap.de',
 }
 
 export async function loadSettings(database = db): Promise<Settings> {
@@ -153,18 +179,23 @@ export async function setSetting<K extends keyof Settings>(clave: K, valor: Sett
 
 export interface Backup {
   app: 'anjamap'
-  version: 1 | 2
+  version: 1 | 2 | 3
   fecha: string
   bancales: Bancal[]
   caminos: Camino[]
   rutas: Ruta[]
   diario?: Apunte[]
+  fotos?: Foto[]
 }
 
-export async function exportBackup(database = db): Promise<Backup> {
-  return database.transaction('r', [database.bancales, database.caminos, database.rutas, database.diario], async () => {
-    const [bancales, caminos, rutas, diario] = await Promise.all([database.bancales.toArray(), database.caminos.toArray(), database.rutas.toArray(), database.diario.toArray()])
-    return { app: 'anjamap' as const, version: 2 as const, fecha: new Date().toISOString(), bancales, caminos, rutas, diario }
+export async function exportBackup(database = db, ids?: string[]): Promise<Backup> {
+  return database.transaction('r', [database.bancales, database.caminos, database.rutas, database.fotos], async () => {
+    const [all, caminos, allRutas, allFotos] = await Promise.all([database.bancales.toArray(), database.caminos.toArray(), database.rutas.toArray(), database.fotos.toArray()])
+    const selected = ids ? new Set(ids) : null
+    // Las nuevas copias contienen los datos del lugar, sin los antiguos campos agrícolas.
+    const bancales = all.filter((b) => !selected || selected.has(b.id)).map(({ id, nombre, finca, nota, lat, lon, precision, color, creado, actualizado }) => ({ id, nombre, finca, nota, lat, lon, precision, color, creado, actualizado }))
+    const included = new Set(bancales.map((b) => b.id))
+    return { app: 'anjamap' as const, version: 3 as const, fecha: new Date().toISOString(), bancales, caminos: selected ? [] : caminos, rutas: allRutas.filter((r) => included.has(r.bancalId)), fotos: allFotos.filter((f) => included.has(f.bancalId)) }
   })
 }
 
@@ -183,12 +214,14 @@ export function validateBackup(data: unknown): Backup {
   if (!record(data) || data.app !== 'anjamap' || !Array.isArray(data.bancales) || !Array.isArray(data.caminos) || !Array.isArray(data.rutas)) {
     throw new Error('El archivo no es una copia de Anjamap')
   }
-  if (data.version !== 1 && data.version !== 2) throw new Error('Versión de copia no compatible')
+  if (data.version !== 1 && data.version !== 2 && data.version !== 3) throw new Error('Versión de copia no compatible')
   if (typeof data.fecha !== 'string' || !Number.isFinite(Date.parse(data.fecha))) throw new Error('Copia dañada: fecha no válida')
   if (data.diario !== undefined && !Array.isArray(data.diario)) throw new Error('Copia dañada: diario')
   const diario = data.diario ?? []
+  if (data.fotos !== undefined && !Array.isArray(data.fotos)) throw new Error('Copia dañada: fotos')
+  const fotos = data.fotos ?? []
   // Validar antes de abrir la transacción que puede reemplazar los datos actuales.
-  for (const rows of [data.bancales, data.caminos, data.rutas, diario]) {
+  for (const rows of [data.bancales, data.caminos, data.rutas, diario, fotos]) {
     const ids = new Set<string>()
     for (const x of rows) {
       if (!record(x) || !text(x.id) || ids.has(x.id)) throw new Error('Copia dañada: identificadores vacíos o repetidos')
@@ -209,18 +242,20 @@ export function validateBackup(data: unknown): Backup {
   for (const x of data.caminos) if (!['pista', 'senda', 'atajo'].includes(x.tipo)) throw new Error('Copia dañada: tipo de camino')
   for (const x of data.rutas) if (!bancales.has(x.bancalId) || !optionalText(x.nota)) throw new Error('Copia dañada: ruta sin bancal')
   for (const x of diario) if (!validApunte(x) || !timestamp(x.creado) || !bancales.has(x.bancalId)) throw new Error('Copia dañada: apunte no válido o sin bancal')
-  return { ...data, diario } as unknown as Backup
+  for (const x of fotos) if (!bancales.has(x.bancalId) || !text(x.nombre) || !timestamp(x.creado) || typeof x.dataUrl !== 'string' || x.dataUrl.length > 5_000_000 || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(x.dataUrl)) throw new Error('Copia dañada: foto no válida o sin bancal')
+  return { ...data, diario, fotos } as unknown as Backup
 }
 
 /** Restaura una copia. "fusionar" añade y actualiza; "reemplazar" borra lo actual primero. */
 export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', database = db) {
   b = validateBackup(b)
-  await database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario], async () => {
-    if (modo === 'reemplazar') await Promise.all([database.bancales.clear(), database.caminos.clear(), database.rutas.clear(), database.diario.clear()])
+  await database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario, database.fotos], async () => {
+    if (modo === 'reemplazar') await Promise.all([database.bancales.clear(), database.caminos.clear(), database.rutas.clear(), database.diario.clear(), database.fotos.clear()])
     await database.bancales.bulkPut(b.bancales)
     await database.caminos.bulkPut(b.caminos)
     await database.rutas.bulkPut(b.rutas)
     await database.diario.bulkPut(b.diario ?? [])
+    await database.fotos.bulkPut(b.fotos ?? [])
   })
 }
 
@@ -238,9 +273,10 @@ export async function addRuta(r: Omit<Ruta, 'id' | 'creado'>, database = db): Pr
 
 /** Borra un bancal, sus rutas y su diario */
 export async function deleteBancal(id: string, database = db) {
-  await database.transaction('rw', database.bancales, database.rutas, database.diario, async () => {
+  await database.transaction('rw', [database.bancales, database.rutas, database.diario, database.fotos], async () => {
     await database.rutas.where('bancalId').equals(id).delete()
     await database.diario.where('bancalId').equals(id).delete()
+    await database.fotos.where('bancalId').equals(id).delete()
     await database.bancales.delete(id)
   })
 }

@@ -126,7 +126,7 @@ export function MapView(props: MapViewProps) {
       zoomControl: false,
       attributionControl: true,
       maxZoom: 21,
-      minZoom: 9,
+      minZoom: 3,
       dragging: interactive,
       touchZoom: interactive,
       doubleClickZoom: interactive,

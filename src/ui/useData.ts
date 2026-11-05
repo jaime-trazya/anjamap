@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Apunte, Bancal, Camino, Ruta, Settings } from '../db/db'
+import type { Bancal, Camino, Ruta, Settings } from '../db/db'
 import type { OsmState } from './osm'
 
 export interface DataValue {
@@ -7,8 +7,6 @@ export interface DataValue {
   bancales: Bancal[]
   caminos: Camino[]
   rutas: Ruta[]
-  /** Diario de todos los bancales, del más reciente al más antiguo */
-  diario: Apunte[]
   settings: Settings
   osm: OsmState
 }

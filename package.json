@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "GPS para llegar a los bancales de olivos: PWA local, sin servidor y sin conexión",
+  "description": "Mapa de bancales con fotos, intercambio de datos y navegación por transporte",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

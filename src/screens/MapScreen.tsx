@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Car, ChevronRight, Layers, LocateFixed, MapPinPlus, Navigation, Plus, Search } from 'lucide-react'
 import { MapView } from '../map/MapView'
 import { setSetting, type Bancal } from '../db/db'
-import { bearing, cardinal, distance, formatDistance, walkMinutes, type LatLon } from '../lib/geo'
+import { bearing, distance, formatDistance, walkMinutes, type LatLon } from '../lib/geo'
 import { hace } from '../lib/fecha'
 import { useData } from '../ui/useData'
 import { usePosition } from '../ui/position'
@@ -111,7 +111,7 @@ export function MapScreen() {
               <div className="grow">
                 <h3 className="ellipsis">{selected.nombre}</h3>
                 <div className="small muted ellipsis">
-                  {[selected.finca, selected.olivos ? `${selected.olivos} olivos` : null].filter(Boolean).join(' · ') || 'Ver ficha'}
+                  {selected.finca || selected.nota || 'Ver lugar y fotos'}
                 </div>
               </div>
               <ChevronRight size={22} className="chev" />
@@ -121,8 +121,8 @@ export function MapScreen() {
                 <Navigation size={24} />
               </span>
               <div className="grow">
-                <strong>Ir al bancal</strong>
-                <span>{fix ? `${formatDistance(distance(fix.p, [selected.lat, selected.lon]))} al ${cardinal(bearing(fix.p, [selected.lat, selected.lon]))} · ≈ ${walkMinutes(distance(fix.p, [selected.lat, selected.lon]) * 1.3)} min` : 'Esperando al GPS'}</span>
+                <strong>Cómo llegar</strong>
+                <span>{fix ? `${formatDistance(distance(fix.p, [selected.lat, selected.lon]))} en línea recta · calcular ruta` : 'Esperando al GPS'}</span>
               </div>
             </button>
           </div>
@@ -267,7 +267,7 @@ function BuscarSheet({ bancales, pos, onClose, onPick }: { bancales: Bancal[]; p
   const [q, setQ] = useState('')
   const items = useMemo(() => {
     const list = bancales
-      .filter((b) => !q || norm(`${b.nombre} ${b.finca ?? ''} ${b.variedad ?? ''} ${b.nota ?? ''}`).includes(norm(q)))
+      .filter((b) => !q || norm(`${b.nombre} ${b.finca ?? ''} ${b.nota ?? ''}`).includes(norm(q)))
       .map((b) => ({ b, d: pos ? distance(pos, [b.lat, b.lon]) : null }))
     if (pos) list.sort((x, y) => x.d! - y.d!)
     return list
@@ -276,7 +276,7 @@ function BuscarSheet({ bancales, pos, onClose, onPick }: { bancales: Bancal[]; p
     <Sheet title="Buscar" onClose={onClose} full>
       <div className="search">
         <Search size={19} />
-        <input className="input" type="search" aria-label="Buscar bancal" autoFocus placeholder="Nombre, finca, variedad…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input className="input" type="search" aria-label="Buscar bancal" autoFocus placeholder="Nombre, zona o nota…" value={q} onChange={(e) => setQ(e.target.value)} />
       </div>
       {items.length ? (
         <section className="card flush list">

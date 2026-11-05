@@ -1,4 +1,4 @@
-import type { TipoApunte, TipoCamino } from '../db/db'
+import type { TipoCamino } from '../db/db'
 
 export const COLORES = [
   { nombre: 'Oliva', color: '#6b7f1f' },
@@ -16,18 +16,3 @@ export const TIPOS: { value: TipoCamino; label: string }[] = [
   { value: 'senda', label: 'Senda' },
   { value: 'atajo', label: 'Atajo' },
 ]
-
-export const APUNTES: { value: TipoApunte; label: string; verbo: string }[] = [
-  { value: 'recoleccion', label: 'Recolección', verbo: 'Recogido' },
-  { value: 'poda', label: 'Poda', verbo: 'Podado' },
-  { value: 'tratamiento', label: 'Tratamiento', verbo: 'Tratado' },
-  { value: 'abono', label: 'Abono', verbo: 'Abonado' },
-  { value: 'riego', label: 'Riego', verbo: 'Regado' },
-  { value: 'desbroce', label: 'Desbroce', verbo: 'Desbrozado' },
-  { value: 'visita', label: 'Visita', verbo: 'Visitado' },
-  { value: 'otro', label: 'Otro', verbo: 'Apunte' },
-]
-export const apunteLabel = (t: TipoApunte) => APUNTES.find((a) => a.value === t)?.label ?? 'Apunte'
-
-/** Variedades de olivo habituales en la zona (solo sugerencias al escribir) */
-export const VARIEDADES = ['Serrana', 'Blanqueta', 'Villalonga', 'Farga', 'Morruda', 'Alfafara', 'Manzanilla', 'Arbequina', 'Picual', 'Cornicabra']

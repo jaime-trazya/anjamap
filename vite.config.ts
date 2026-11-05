@@ -21,7 +21,7 @@ export default defineConfig({
         id: base,
         name: 'Anjamap · Bancales',
         short_name: 'Anjamap',
-        description: 'GPS para llegar a tus bancales de olivos. Funciona sin conexión.',
+        description: 'Guarda lugares con fotos, compártelos y calcula cómo llegar.',
         lang: 'es',
         dir: 'ltr',
         start_url: base,

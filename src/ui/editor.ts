@@ -1,5 +1,4 @@
 import { createContext, useContext } from 'react'
-import type { Apunte, TipoApunte } from '../db/db'
 import type { LatLon } from '../lib/geo'
 
 export interface NewBancalOpts {
@@ -12,19 +11,11 @@ export interface NewBancalOpts {
   color?: string
 }
 
-export interface ApunteOpts {
-  bancalId?: string
-  tipo?: TipoApunte
-  apunte?: Apunte
-}
-
 export interface EditorApi {
   /** Abre el editor de un bancal existente o uno nuevo */
   openBancal(id?: string, opts?: NewBancalOpts): void
   /** Hoja de acciones "Añadir" */
   openAdd(): void
-  /** Nuevo apunte del diario o editar uno */
-  openApunte(opts?: ApunteOpts): void
 }
 
 export const EditorCtx = createContext<EditorApi | null>(null)

@@ -1,195 +1,57 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ChevronRight, CloudDownload, Download, FileDown, HardDrive, Smartphone, Upload } from 'lucide-react'
-import { db, exportBackup, importBackup, setSetting, validateBackup, type Backup } from '../db/db'
+import { ChevronRight, CloudDownload, HardDrive, Import, Smartphone } from 'lucide-react'
+import { db, DEFAULT_SETTINGS, setSetting } from '../db/db'
 import { COMARCAS } from '../domain/comarcas'
-import { toGpx } from '../domain/gpx'
+import { routeEndpoint } from '../domain/routing'
 import { AVG_TILE_BYTES, borrarTeselas, cancelarDescarga, espacio, formatBytes, hasCacheApi } from '../map/tiles'
 import { useData } from '../ui/useData'
 import { descargarComarca, descargarDetalle, NIVELES, tilesComarca, tilesDetalle, useDescarga, type Nivel } from '../ui/offline'
-import { pickFile, saveFile, today } from '../ui/files'
 import { useToast } from '../ui/toast'
-import { Segmented, Sheet, Switch } from '../ui/components'
+import { Segmented, Switch } from '../ui/components'
 import { useAction } from '../ui/useAction'
+import { TransferSheet } from '../ui/TransferSheet'
+import { TransportPicker } from '../ui/TransportPicker'
 
 export function SettingsScreen() {
-  const { settings, bancales, caminos, rutas, diario, osm } = useData()
+  const { settings, bancales, caminos, rutas } = useData()
+  const fotoCount = useLiveQuery(() => db.fotos.count()) ?? 0
   const toast = useToast()
   const { busy, run } = useAction()
-  const [restore, setRestore] = useState<Backup | null>(null)
-
-  const exportar = async () => {
-    const b = await exportBackup()
-    await saveFile(`copia-anjamap-${today()}.json`, JSON.stringify(b), 'application/json')
-  }
-  const importar = async () => {
-    const f = await pickFile('application/json,.json')
-    if (!f) return
-    try {
-      setRestore(validateBackup(JSON.parse(await f.text())))
-    } catch (e) {
-      toast.show((e as Error).message.startsWith('Unexpected') ? 'El archivo no es una copia válida' : (e as Error).message)
-    }
-  }
-  const exportarGpx = () => {
-    void saveFile(
-      `anjamap-${today()}.gpx`,
-      toGpx({
-        waypoints: bancales.map((b) => ({ name: b.nombre, point: [b.lat, b.lon], desc: [b.finca, b.nota].filter(Boolean).join(' · ') || undefined })),
-        tracks: [...caminos.map((c) => ({ name: c.nombre, points: c.puntos })), ...rutas.map((r) => ({ name: r.nombre, points: r.puntos }))],
-      }),
-      'application/gpx+xml',
-    )
-  }
-
-  return (
-    <main className="screen">
-      <div className="head">
-        <div>
-          <div className="eyebrow">Anjamap</div>
-          <h1 className="title">Ajustes</h1>
-        </div>
-      </div>
-
-      <OfflineSection />
-
-      <div className="section">
-        <h2>Mapa</h2>
-      </div>
-      <section className="card stack">
-        <div className="field">
-          <span className="field-label">Capa</span>
-          <Segmented
-            value={settings.capa}
-            onChange={(v) => void setSetting('capa', v)}
-            options={[
-              { value: 'satelite', label: 'Satélite' },
-              { value: 'mapa', label: 'Mapa' },
-            ]}
-            label="Capa del mapa"
-          />
-        </div>
-        <div className="check-row">
-          <div className="grow">
-            <div>Caminos de OpenStreetMap</div>
-            <div className="meta">
-              {osm.estado === 'listo' && osm.net
-                ? `${osm.net.edges.length.toLocaleString('es-ES')} tramos de pistas, sendas y calles de las dos comarcas para recomendar rutas.`
-                : osm.estado === 'cargando'
-                  ? 'Cargando…'
-                  : osm.estado === 'error'
-                    ? 'No se han podido cargar.'
-                    : 'Desactivados: solo se usan tus caminos.'}
-            </div>
-          </div>
-          <Switch checked={settings.caminosOsm} onChange={(v) => void setSetting('caminosOsm', v)} label="Caminos de OpenStreetMap" />
-        </div>
-        <div className="check-row">
-          <div className="grow">
-            <div>Detalle automático</div>
-            <div className="meta">Al guardar un bancal con conexión, baja el satélite con máximo detalle de sus alrededores.</div>
-          </div>
-          <Switch checked={settings.autoDetalle} onChange={(v) => void setSetting('autoDetalle', v)} label="Detalle automático" />
-        </div>
-        <div className="field">
-          <span className="field-label">Apariencia</span>
-          <Segmented
-            value={settings.tema}
-            onChange={(v) => void setSetting('tema', v)}
-            options={[
-              { value: 'sistema', label: 'Automático' },
-              { value: 'claro', label: 'Claro' },
-              { value: 'oscuro', label: 'Oscuro' },
-            ]}
-            label="Apariencia"
-          />
-        </div>
-      </section>
-
-      <div className="section">
-        <h2>Tus datos</h2>
-      </div>
-      <section className="card flush list">
-        <button className="list-item" disabled={busy} onClick={() => void run(exportar)}>
-          <span className="tile sm none">
-            <Download size={16} />
-          </span>
-          <div className="grow">
-            <div className="primary-line">Hacer copia de seguridad</div>
-            <div className="secondary-line">Guárdala en iCloud Drive o Google Drive</div>
-          </div>
-        </button>
-        <button className="list-item" onClick={() => void importar()}>
-          <span className="tile sm none">
-            <Upload size={16} />
-          </span>
-          <div className="grow primary-line">Restaurar copia</div>
-        </button>
-        <button className="list-item" onClick={exportarGpx}>
-          <span className="tile sm none">
-            <FileDown size={16} />
-          </span>
-          <div className="grow">
-            <div className="primary-line">Exportar todo a GPX</div>
-            <div className="secondary-line">Para abrirlo en Google Earth, Wikiloc u otro GPS</div>
-          </div>
-        </button>
-        <a className="list-item tap" href="#/ajustes/instalar">
-          <span className="tile sm none">
-            <Smartphone size={16} />
-          </span>
-          <div className="grow primary-line">Instalar en el móvil</div>
-          <ChevronRight size={18} className="chev" />
-        </a>
-      </section>
-      <p className="meta" style={{ padding: '0 4px' }}>
-        {bancales.length} bancales · {caminos.length} caminos · {rutas.length} rutas · {diario.length} apuntes. Todo se guarda solo en este teléfono, sin servidor ni cuentas.
-      </p>
-
-      <div className="section">
-        <h2>Fuentes</h2>
-      </div>
-      <section className="card stack" style={{ gap: 6 }}>
-        <p className="small muted">Imagen de satélite: PNOA cedido por © Instituto Geográfico Nacional (CC BY 4.0). Mapa base: © Instituto Geográfico Nacional.</p>
-        <p className="small muted">
-          Pistas, sendas y límites de las comarcas: © colaboradores de OpenStreetMap (ODbL)
-          {osm.net?.fecha ? `, datos del ${new Date(osm.net.fecha).toLocaleDateString('es-ES')}` : ''}.
-        </p>
-      </section>
-
-      {restore && (
-        <Sheet title="Restaurar copia" onClose={() => setRestore(null)}>
-          <p className="muted">
-            La copia del {new Date(restore.fecha).toLocaleDateString('es-ES')} tiene {restore.bancales.length} bancales, {restore.caminos.length} caminos, {restore.rutas.length} rutas y {restore.diario?.length ?? 0} apuntes.
-          </p>
-          <button
-            className="btn primary block"
-            disabled={busy}
-            onClick={() => void run(async () => {
-              await importBackup(restore, 'fusionar')
-              setRestore(null)
-              toast.show('Copia añadida')
-            })}
-          >
-            Añadir a lo que tengo
-          </button>
-          <button
-            className="btn danger block"
-            disabled={busy}
-            onClick={() => void run(async () => {
-              const ok = await toast.confirm({ title: '¿Reemplazar todo?', message: 'Se borrarán los bancales, caminos, rutas y apuntes actuales y se pondrán los de la copia.', confirmLabel: 'Reemplazar', danger: true })
-              if (!ok) return
-              await importBackup(restore, 'reemplazar')
-              setRestore(null)
-              toast.show('Copia restaurada')
-            })}
-          >
-            Reemplazar todo
-          </button>
-        </Sheet>
-      )}
-    </main>
-  )
+  const [transfer, setTransfer] = useState(false)
+  const [server, setServer] = useState(settings.servidorRutas)
+  return <main className="screen">
+    <div className="head"><div><div className="eyebrow">Anjamap</div><h1 className="title">Ajustes</h1></div></div>
+    <div className="section"><h2>Navegación</h2></div>
+    <section className="card stack">
+      <div className="field"><span className="field-label">Transporte habitual</span><TransportPicker value={settings.transporte} onChange={(value) => void setSetting('transporte', value)} /></div>
+      <div className="check-row"><div className="grow"><div>Indicaciones por voz</div><p className="meta">Lee el siguiente giro mientras sigues la ruta.</p></div><Switch label="Indicaciones por voz" checked={settings.voz} onChange={(value) => void setSetting('voz', value)} /></div>
+      <div className="check-row"><div className="grow"><div>Preferir rutas sin peajes</div><p className="meta">En coche. Se avisará si la ruta aún incluye alguno.</p></div><Switch label="Preferir rutas sin peajes" checked={settings.evitarPeajes} onChange={(value) => void setSetting('evitarPeajes', value)} /></div>
+      <div className="check-row"><div className="grow"><div>Preferir rutas sin autopistas</div><p className="meta">En coche. Puede ser necesario usarlas para llegar.</p></div><Switch label="Preferir rutas sin autopistas" checked={settings.evitarAutopistas} onChange={(value) => void setSetting('evitarAutopistas', value)} /></div>
+      <label className="field"><span>Velocidad de referencia del patinete</span><select className="select" value={settings.velocidadPatinete} onChange={(e) => void setSetting('velocidadPatinete', Number(e.target.value))}>{[10, 15, 20, 25].map((v) => <option key={v} value={v}>{v} km/h</option>)}</select></label>
+      <p className="meta">A pie, coche y bici usan perfiles distintos. Patinete ofrece una ruta orientativa de bicicleta con preferencia por pendientes suaves y vías ciclistas; no verifica las restricciones específicas de VMP.</p>
+      <p className="meta">Para calcular y recalcular hace falta conexión. Una ruta ya calculada puede seguirse al perder cobertura. Los tiempos son estimaciones, sin tráfico en directo.</p>
+    </section>
+    <div className="section"><h2>Bancales y fotos</h2></div>
+    <section className="card flush list"><button className="list-item" onClick={() => setTransfer(true)}><span className="tile sm none"><Import size={19} /></span><div className="grow"><div className="primary-line">Importar, exportar y enviar</div><div className="secondary-line">Archivo completo con fotos o GPX</div></div><ChevronRight size={18} /></button></section>
+    <p className="meta">{bancales.length} bancales · {fotoCount} fotos · {caminos.length} caminos · {rutas.length} rutas. Se guardan en este dispositivo. Haz una copia para pasarlos a otra persona o cambiar de móvil.</p>
+    <div className="section"><h2>Mapa y apariencia</h2></div>
+    <section className="card stack">
+      <div className="field"><span className="field-label">Mapa</span><Segmented label="Capa del mapa" value={settings.capa} onChange={(v) => void setSetting('capa', v)} options={[{ value: 'mapa', label: 'Calles' }, { value: 'satelite', label: 'Satélite' }]} /></div>
+      <div className="field"><span className="field-label">Apariencia</span><Segmented label="Apariencia" value={settings.tema} onChange={(v) => void setSetting('tema', v)} options={[{ value: 'sistema', label: 'Automático' }, { value: 'claro', label: 'Claro' }, { value: 'oscuro', label: 'Oscuro' }]} /></div>
+      <div className="check-row"><div className="grow"><div>Guardar detalle del bancal</div><p className="meta">Descarga automáticamente el satélite de sus alrededores al añadirlo.</p></div><Switch label="Detalle automático" checked={settings.autoDetalle} onChange={(v) => void setSetting('autoDetalle', v)} /></div>
+      <div className="check-row"><div className="grow"><div>Red local de caminos</div><p className="meta">Para orientación a pie sin conexión en la Canal de Navarrés y La Costera.</p></div><Switch label="Caminos de OpenStreetMap" checked={settings.caminosOsm} onChange={(v) => void setSetting('caminosOsm', v)} /></div>
+    </section>
+    <OfflineSection />
+    <details className="card stack"><summary>Servidor de rutas</summary><p className="meta">Se envían tu posición y el destino a este servicio para calcular el recorrido. El servidor público es de demostración y puede limitar peticiones. Para un uso estable puedes configurar un servidor Valhalla propio con CORS.</p>
+      <label className="field"><span>Dirección del servidor</span><input className="input" type="url" value={server} onChange={(e) => setServer(e.target.value)} autoCapitalize="none" autoCorrect="off" spellCheck={false} /></label>
+      <button className="btn block" disabled={busy} onClick={() => void run(async () => { routeEndpoint(server); await setSetting('servidorRutas', server.trim()); toast.show('Servidor de rutas guardado') })}>Guardar servidor</button>
+      <button className="btn block" onClick={() => { setServer(DEFAULT_SETTINGS.servidorRutas); void setSetting('servidorRutas', DEFAULT_SETTINGS.servidorRutas) }}>Usar servidor público</button>
+    </details>
+    <a className="btn block" href="#/ajustes/instalar"><Smartphone size={19} /> Instalar en el móvil</a>
+    <p className="meta">Mapas: © Instituto Geográfico Nacional (PNOA, IGN). Rutas y caminos: © colaboradores de OpenStreetMap · motor Valhalla.</p>
+    {transfer && <TransferSheet onClose={() => setTransfer(false)} />}
+  </main>
 }
 
 function OfflineSection() {

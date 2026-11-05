@@ -1,79 +1,64 @@
 # Anjamap · Bancales
 
-PWA para llegar andando a los bancales de olivos de **la Canal de Navarrés** y **La Costera**, y llevar su diario de campo. Funciona sin conexión. No tiene backend: todo se guarda en el móvil (IndexedDB) y se instala con «Añadir a pantalla de inicio».
-
-Instrucciones de uso: **[GUIA_USO.md](GUIA_USO.md)**
+Aplicación para guardar sitios, reconocerlos por sus fotos y llegar hasta ellos. React, TypeScript, Leaflet y Dexie; los datos personales se guardan en el dispositivo. No hay cuentas.
 
 ## Funciones
 
-- **Bancales:**
-  - Se guardan de tres formas: con el GPS estando en el bancal (promedia varias lecturas para ganar precisión), marcándolos en el satélite o importándolos de un GPX.
-  - Cada uno lleva nombre, finca o partida, número de olivos, variedad, nota y color.
-- **Ir al bancal:**
-  - Una brújula con una flecha naranja que apunta hacia dónde ir, la distancia que falta y el tiempo andando.
-  - En los cruces da indicaciones: «En 40 m, gira a la izquierda». El móvil vibra al acercarse a cada giro y al llegar.
-  - Abajo, el mapa sigue tu posición.
-- **Tres formas de ir:**
-  - *Recomendada:* por la red de pistas y sendas, penalizando el campo a través (×2,5). Se recalcula con cada lectura del GPS.
-  - *Línea recta.*
-  - *Rutas guardadas:* las que has grabado andando o dibujado para ese bancal.
-- **Caminos de OpenStreetMap ya cargados:** unos 31.000 tramos de pistas, sendas y calles de las dos comarcas. Los caminos propios (grabados, dibujados o de GPX) se unen solos a esa red en los cruces y en los extremos cercanos (12 m).
-- **Volver al coche:** se marca dónde aparcas y te lleva de vuelta con la misma flecha.
-- **Ir a cualquier punto:** mantén pulsado el mapa y elige «Ir aquí», sin necesidad de guardarlo como bancal.
-- **Compartir un bancal:** genera un enlace (para WhatsApp, por ejemplo). Quien lo abre puede guardarlo en su Anjamap o ir directamente.
-- **Diario de campo:**
-  - Apuntes de poda, tratamiento, abono, riego, desbroce, recolección (con kilos) y visitas.
-  - Se organiza por campañas, de septiembre a agosto, con los kilos por bancal y los kilos por olivo.
-  - Filtro por bancal, kilos con decimales y días de recogida sin duplicar fechas. El rendimiento por olivo solo se calcula con un censo completo de los bancales con cosecha.
-- **Sin conexión:**
-  - Siempre funcionan sin datos el GPS, la flecha, las rutas por caminos (la red de OSM viaja con la app) y el diario.
-  - El satélite se descarga por comarca (básico o detallado) y con máximo detalle alrededor de tus bancales y caminos.
-- **Copia de seguridad** en JSON (bancales, caminos, rutas y diario) y exportación a GPX.
-- Modo claro y modo oscuro.
+- Mapa de calles o satélite, búsqueda de bancales y posición GPS.
+- Bancales con nombre, grupo o zona, nota de acceso y fotos.
+- Fotos desde la cámara o la galería, reducidas antes de guardarse.
+- Cómo llegar a pie, en coche o en bicicleta, con recorridos e indicaciones calculados por Valhalla.
+- Patinete: aproximación mediante el perfil de bicicleta, preferencia por vías ciclistas y pendientes suaves. No es un perfil específico de VMP y no comprueba sus restricciones.
+- Navegación centrada en el mapa, distancia, duración estimada, hora de llegada e indicaciones en español. Voz opcional.
+- Preferencias para evitar peajes y autopistas en coche; se avisa si la ruta todavía incluye alguno.
+- La ruta termina donde llega la red viaria. Si el bancal está más allá, se muestra la distancia en línea recta y se puede continuar a pie.
+- Importación y exportación JSON con bancales, fotos, caminos y rutas. Se puede enviar todo, varios bancales seleccionados o uno desde su ficha.
+- Importación y exportación GPX para intercambiar puntos y recorridos con otras apps (sin fotos).
+- Coche aparcado, caminos propios grabados o dibujados y orientación a pie sin conexión.
 
-## Diseño
+No hay diario agrícola, tratamientos, podas, campañas ni formularios de producción. Se mantiene compatibilidad de lectura con copias antiguas y no se borra automáticamente la tabla histórica de instalaciones anteriores.
 
-Es un «cuaderno de campo»:
-- Papel cálido y tinta verde casi negra.
-- Verde oliva para la marca.
-- Naranja de señalización solo en lo que hay que ver de un vistazo al sol: la flecha, «Ir» y la ruta en el mapa.
-- Tipografía Barlow para leer y Barlow Condensed para títulos y cifras. Se incluyen en la app, así que también se ven sin conexión.
+## Rutas y conexión
 
-## Fuentes de datos
+El cálculo en línea usa perfiles reales de peatón, automóvil y bicicleta. No se obtiene un recorrido de coche cambiando la velocidad de una ruta peatonal.
 
-- Ortofoto **PNOA** y mapa base del **Instituto Geográfico Nacional** (WMTS, CC BY 4.0). Las teselas se piden con CORS y se guardan con la Cache API (`anjamap-teselas`).
-- Pistas, sendas, calles y límites de las comarcas: **© colaboradores de OpenStreetMap** (ODbL).
-  - Red de caminos: [public/caminos-osm.json](public/caminos-osm.json), generada con `node scripts/generar-caminos-osm.mjs`.
-  - Límites: relaciones 1691747 y 1691752, en [src/domain/comarcas.ts](src/domain/comarcas.ts).
+Por defecto se utiliza el servidor público de demostración de Valhalla/FOSSGIS, con identificador de cliente, peticiones cancelables y recálculo limitado. No ofrece garantía de disponibilidad ni tráfico en directo. La documentación del operador pide avisar antes de publicar aplicaciones que utilicen su servidor. Para distribuir un servicio estable, se recomienda configurar un servidor propio compatible con CORS en **Ajustes → Servidor de rutas**.
+
+Al calcular una ruta, el servidor recibe el origen, destino y preferencias. Las fotos y las copias no se suben a ese servidor.
+
+La ruta se calcula con conexión. Si se pierde cobertura durante la sesión, se conserva el trazado; los desvíos requieren conexión para recalcularse. La orientación local y los recorridos propios a pie funcionan sin conexión, pero pueden atravesar campo y no verifican restricciones de paso. La red local cubre la Canal de Navarrés y La Costera. El satélite se descarga desde Ajustes.
+
+## Datos y fotos
+
+IndexedDB versión 3 añade una tabla de fotos sin borrar los bancales de las versiones anteriores. Las nuevas copias son versión 3 y admiten importaciones de versiones 1 y 2.
+
+Las fotos se reducen a un máximo de 1600 px y se guardan como JPEG, hasta 20 por bancal. La imagen viaja dentro del JSON: quien lo importa recibe el contenido, no un enlace que depende del dispositivo original. El archivo de intercambio admite hasta 100 MB; para cantidades mayores hay que seleccionar grupos y enviarlos en varios archivos.
+
+Fusionar añade y actualiza identificadores coincidentes. Reemplazar sustituye todos los datos tras confirmación. Las copias se validan antes de modificar las tablas.
+
+Guía: [GUIA_USO.md](GUIA_USO.md).
 
 ## Desarrollo
 
 ```bash
-npm install
-npm run dev        # servidor local
-npm test           # Vitest
-npm run lint       # ESLint
-npm run build      # build de producción en dist/
-npm run iconos     # regenera iconos y pantallas de inicio (necesita Playwright)
-node scripts/generar-caminos-osm.mjs   # vuelve a bajar la red de caminos de OSM
+npm ci
+npm run dev
+npm run lint
+npm test
+npm run build
+npm run preview
+npm audit
 ```
 
-El GPS y la brújula solo funcionan con HTTPS (o en `localhost`).
+El sitio se sirve bajo `/anjamap/`. GPS, cámara y brújula requieren un contexto seguro (HTTPS o localhost). La app conserva `noindex`.
 
-## Estructura
+## Fuentes
 
-| Carpeta | Qué hay |
-| --- | --- |
-| `src/lib/` | Distancias, rumbos, proyección local, simplificación y fechas |
-| `src/domain/graph.ts` | Red de caminos (OSM y propios), ruta recomendada (A*) e indicaciones de giro |
-| `src/domain/nav.ts` | Seguimiento de la ruta: hacia dónde apunta la flecha, cuánto falta y el siguiente giro |
-| `src/domain/osm.ts` | Lectura de la red de OpenStreetMap |
-| `src/map/` | Capa de Leaflet con caché sin conexión y descargas por zona |
-| `src/db/db.ts` | Base de datos local (Dexie, versión 2 con el diario), ajustes y copia de seguridad |
-| `src/screens/` | Pantallas |
+- Mapa base y ortofotos PNOA: © Instituto Geográfico Nacional.
+- Caminos y red viaria: © colaboradores de OpenStreetMap, ODbL.
+- Motor de rutas: [Valhalla](https://valhalla.github.io/valhalla/api/route/api-reference/).
+- Condiciones del servidor público: [documentación de Valhalla](https://valhalla.github.io/valhalla/valhalla-intro/).
 
-La red de OSM se monta (unos 114.000 nodos) solo cuando una pantalla calcula rutas, después de pintar. En un ordenador tarda unos 0,4 s; cada ruta, unos 10 ms.
+## Publicación existente
 
-## Publicación
-
-`.github/workflows/deploy.yml` compila, pasa lint y tests y publica `dist/` en la rama `gh-pages` cada vez que se sube algo a `main`. Pages sirve esa rama (*Settings → Pages → Deploy from a branch → gh-pages*) en https://jaime-trazya.github.io/anjamap/. La página lleva `noindex`.
+El workflow `.github/workflows/deploy.yml` compila, ejecuta lint y tests y publica en `gh-pages` al subir a `main`. Esta tarea no cambia ese workflow ni publica automáticamente los cambios de la rama de trabajo.

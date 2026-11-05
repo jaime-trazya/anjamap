@@ -1,102 +1,75 @@
-# Guía de uso de Anjamap
+# Usar Anjamap
 
-## 1. Instalar
+Anjamap sirve para guardar bancales o puntos de encuentro y llegar hasta ellos.
 
-**iPhone:**
+## Guardar un bancal
 
-1. Abre la dirección de la app en **Safari**.
-2. Pulsa Compartir y elige **Añadir a pantalla de inicio**.
-3. Úsala siempre desde el icono: Safari y el icono guardan los datos por separado.
+Pulsa **+** en el mapa. Puedes guardar tu posición con el GPS o marcar un punto sobre el mapa. Dale un nombre, un grupo o zona y una nota para reconocer la entrada.
 
-**Android:**
+En **Bancales** puedes buscarlos, ordenarlos por cercanía o agruparlos por zona. Desde la ficha puedes editar el lugar o moverlo sobre el mapa.
 
-1. Abre la dirección de la app en Chrome.
-2. En el menú ⋮, pulsa **Instalar aplicación**.
+## Añadir fotos
 
-La primera vez, la app pide permiso de ubicación. Hay que darlo.
+Abre la ficha del bancal y pulsa **Añadir fotos** o **Cámara**. Se pueden guardar hasta 20 fotos por lugar. Resultan útiles las fotos de la puerta, el cruce o la entrada.
 
-## 2. Bajar el mapa para el campo (en casa, con wifi)
+Las fotos se reducen antes de guardarse. Se conservan en este dispositivo y viajan en las copias JSON. Si el móvil no abre una imagen HEIC, utiliza JPG, PNG o WebP.
 
-Ve a **Ajustes → Mapa sin conexión**:
+## Cómo llegar
 
-- **La Canal de Navarrés / La Costera:** descarga cada comarca a nivel **Básico** (20–25 MB por comarca) o **Detallado** (70–95 MB por comarca; ya se distinguen los bancales). Deja la app abierta mientras descarga.
-- **Máximo detalle en tus bancales:** baja el satélite con máxima resolución alrededor de cada bancal y a lo largo de tus caminos. Repítelo cuando añadas bancales o caminos nuevos.
+Abre un bancal, elige **A pie**, **Coche**, **Bici** o **Patinete** y pulsa **Cómo llegar**. Concede permiso de ubicación.
 
-Aunque no bajes nada, **la flecha, la distancia, las rutas por caminos y el diario funcionan siempre sin cobertura**. Lo que se descarga es la imagen del satélite.
+La app calcula el recorrido con conexión y muestra el siguiente giro, el tiempo estimado, los metros restantes y la hora aproximada de llegada. El botón de posición vuelve a centrar el mapa; el botón de recorrido encuadra toda la ruta. **Indicaciones** muestra los giros en una lista.
 
-## 3. Guardar los bancales
+El patinete utiliza una ruta orientativa de bicicleta; no comprueba las restricciones específicas de VMP. No es un perfil de moto.
 
-Tienes cuatro formas:
+En coche, el destino puede quedar más allá de la última vía disponible. Anjamap indica esa distancia, sin inventar una carretera hasta el bancal. Al llegar al acceso puedes elegir **Continuar andando**.
 
-- **Estando en el bancal:** pulsa **+ → Guardar bancal aquí** y quédate quieto unos segundos mientras se afina el GPS. Ponle nombre, finca, número de olivos y variedad.
-- **Desde casa:** mantén pulsado el mapa encima del bancal y elige **Nuevo bancal aquí**. También puedes usar **+ → Marcar bancal en el mapa**.
-- **Desde un GPX:** en **Caminos → Importar GPX**, los puntos del archivo pueden entrar como bancales.
-- **Que te lo pasen:** si alguien te manda el enlace de un bancal, ábrelo y pulsa **Guardar en mis bancales**.
+Los tiempos son estimados y no incluyen tráfico en directo. Las preferencias de peajes y autopistas intentan evitarlos; la app avisa si no lo consigue.
 
-Si un bancal quedó mal puesto, abre su ficha y pulsa **Mover**.
+## Sin cobertura
 
-Para pasarle un bancal a alguien, abre su ficha y pulsa **Compartir**. Se envía un enlace de Anjamap y otro de Google Maps.
+Una ruta ya calculada se conserva mientras siga abierta la sesión de navegación. Recalcular un desvío requiere conexión.
 
-## 4. Ir al bancal
+En **Opciones**, a pie, puedes elegir un recorrido propio, **Orientación local sin conexión** o **Flecha en línea recta**. La orientación local cubre los caminos de la Canal de Navarrés y La Costera; puede pasar campo a través y no comprueba permisos de acceso.
 
-Abre el bancal (o tócalo en el mapa) y pulsa el botón naranja **Ir al bancal**. Arriba eliges cómo ir:
+Descarga el satélite desde **Ajustes → Mapa sin conexión** antes de salir. El GPS puede funcionar sin datos. Mantén la app abierta para seguir la posición o grabar un camino.
 
-- **Recomendada:** por pistas y sendas, si compensa frente a ir campo a través. Si te desvías, se recalcula sola.
-- **Línea recta.**
-- **Tus rutas guardadas.**
+## Pasar bancales a otra persona
 
-En la pantalla verás:
+- **Uno:** abre su ficha y pulsa **Enviar con fotos**.
+- **Varios:** en **Bancales**, pulsa **Seleccionar**, marca los sitios y **Enviar**.
+- **Todos:** pulsa **Importar / enviar** sin seleccionar, o entra desde Ajustes.
 
-- **La indicación del siguiente cruce,** por ejemplo «En 40 m, gira a la izquierda». Se pone naranja cuando hay que girar ya, y el móvil vibra.
-- **La flecha naranja,** que señala hacia dónde ir. En iPhone, pulsa **Activar brújula** la primera vez. Sin brújula, la rosa de los vientos queda con la N roja arriba y, en cuanto empiezas a andar, la flecha usa tu dirección de marcha.
-- **El número grande,** que es lo que falta siguiendo la ruta.
+Elige **Enviar archivo con fotos** para usar el menú de compartir, o **Descargar copia completa**. En escritorio, si el navegador no permite compartir archivos, se descarga el JSON para enviarlo manualmente.
 
-Al llegar, el móvil vibra y aparece **Has llegado**, con un botón para apuntar en el diario lo que hayas hecho.
+La otra persona abre Anjamap y utiliza **Importar JSON o GPX**. Se muestra cuántos bancales, fotos y rutas va a recibir antes de añadirlos.
 
-Para ir en coche hasta la finca, la ficha tiene un botón **En coche** que abre Google Maps.
+**Añadir a mis bancales** conserva los demás y actualiza los identificadores coincidentes. Importar de nuevo el mismo JSON no duplica los sitios. **Reemplazar todos mis datos** borra lo actual y lo sustituye por el archivo, tras confirmación.
 
-## 5. Volver al coche
+El máximo por archivo es 100 MB. Si lo superas, envía varios grupos de bancales.
 
-Al aparcar, pulsa **+ → Dejar el coche aquí**. También puedes mantener pulsado el mapa donde lo has dejado.
+## JSON, GPX y enlaces
 
-En el mapa aparece un botón con el coche y la distancia. Púlsalo y elige **Volver al coche**: la flecha te lleva hasta él.
+- **JSON de Anjamap:** conserva lugares, notas, grupos, fotos y rutas. Es la opción para otra persona con Anjamap o para cambiar de móvil.
+- **GPX:** conserva ubicaciones y recorridos para otras aplicaciones GPS. No incluye fotos.
+- **Enviar enlace:** comparte la ubicación de un solo bancal, sin sus fotos. La persona puede guardarlo o ir directamente.
 
-## 6. Ir a un punto cualquiera
+Las copias antiguas de Anjamap siguen siendo compatibles.
 
-Mantén pulsado el mapa y elige **Ir aquí**. Sirve para una caseta, una balsa o el bancal de un vecino, sin tener que guardarlo.
+## Ajustes
 
-## 7. Caminos
+Puedes elegir transporte habitual, voz, preferencias de peajes y autopistas en coche, velocidad de referencia del patinete, calles o satélite y tema claro u oscuro.
 
-La app ya trae las pistas, sendas y calles de **OpenStreetMap** de las dos comarcas. Con ellas recomienda por dónde ir desde el primer día. Puedes desactivarlas en Ajustes.
+En **Servidor de rutas** se configura el servicio de cálculo. El servidor público predeterminado es de demostración y puede tener límites. Recibe el origen y destino, pero no recibe tus fotos ni tus copias. Un servidor propio debe ser Valhalla y permitir CORS.
 
-Si falta alguna senda, un atajo entre bancales o el paso por la acequia, añádelo tú:
+## Coche y caminos propios
 
-- **Grabar andando:** **Caminos → Grabar andando** y recorre la senda. Mantén la app abierta y la pantalla encendida: con la app cerrada, el teléfono no apunta el recorrido.
-- **Dibujar:** mueve el mapa y pulsa **Añadir punto** en cada curva, o toca directamente el mapa.
-- **Importar GPX:** por ejemplo, rutas de Wikiloc.
+Con **+ → Dejar el coche aquí** guardas dónde has aparcado. Desde el mapa puedes volver a él.
 
-Tus caminos se unen solos a los de OpenStreetMap cuando se cruzan o terminan a pocos metros.
+En **Caminos** puedes grabar un acceso andando, dibujarlo o importar GPX. Los recorridos propios se usan como orientación a pie; no se tratan como vías verificadas para coches, bicicletas o patinetes.
 
-## 8. Rutas guardadas a un bancal
+## Instalar y conservar tus datos
 
-Si sueles llegar a un bancal siempre por el mismo sitio (por la acequia, por la puerta de la finca…), guárdalo desde la ficha del bancal con **Grabar ruta andando** o **Dibujar ruta en el mapa**. Al navegar podrás elegirla en vez de la recomendada.
+Instala desde **Ajustes → Instalar en el móvil**. Usa siempre la misma instalación y haz copias con fotos. En iPhone, Safari y la app instalada pueden tener almacenamiento separado: una copia permite trasladar tus lugares.
 
-## 9. Diario
-
-Apunta lo que haces en cada bancal: **poda, tratamiento, abono, riego, desbroce, recolección** (con los kilos) o una **visita**. Hay tres sitios para hacerlo:
-
-- En la ficha del bancal, con los botones de la sección **Diario**.
-- Al llegar a un bancal, con **Apuntar en el diario**.
-- En la pestaña **Diario** o en **+ → Apuntar en el diario**.
-
-La pestaña **Diario** muestra cada campaña (de septiembre a agosto): los kilos recogidos, los kilos por bancal y por olivo, y todos los apuntes por meses. En la lista de bancales se ve el último apunte de cada uno.
-
-Puedes elegir **Todos los bancales** o uno concreto en el selector. En la ficha de un bancal, **Ver todo** abre directamente su diario. Los kilos admiten decimales (por ejemplo, **125,5**). Los días de recogida cuentan fechas distintas; el rendimiento por olivo solo aparece si todos los bancales con cosecha tienen indicado su número de olivos.
-
-## 10. Copias de seguridad
-
-En **Ajustes → Hacer copia de seguridad**, guarda el archivo en iCloud Drive o Google Drive. Incluye bancales, caminos, rutas y diario. Si cambias de móvil, usa **Restaurar copia**.
-
-Antes de restaurar, la app comprueba el contenido de la copia. Si está dañada o usa una versión incompatible, la rechaza y conserva tus datos actuales. Sigue admitiendo las copias de la versión 1, que no incluían diario.
-
-**Exportar todo a GPX** sirve para ver tus bancales y caminos en Google Earth o en otro GPS.
+Una actualización conserva los bancales existentes. El antiguo diario agrícola ya no aparece en la app.

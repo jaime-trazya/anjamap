@@ -39,12 +39,12 @@ describe('base de datos', () => {
     expect(() => validateBackup({ app: 'anjamap', bancales: [{ id: 'x' }], caminos: [], rutas: [] })).toThrow()
   })
 
-  it('el diario viaja en la copia y se borra con su bancal', async () => {
+  it('acepta el diario antiguo pero las nuevas copias solo exportan lugares', async () => {
     const a = fresh()
     await a.bancales.add({ id: 'b1', nombre: 'A', lat: 39, lon: -0.7, precision: null, color: '#000', olivos: 40, creado: 1, actualizado: 1 })
     await saveApunte({ bancalId: 'b1', tipo: 'recoleccion', fecha: new Date(2026, 10, 5, 12).getTime(), kg: 350 }, a)
-    const copia = validateBackup(JSON.parse(JSON.stringify(await exportBackup(a))))
-    expect(copia.diario).toHaveLength(1)
+    const copia = validateBackup({ ...await exportBackup(a), version: 2, diario: await a.diario.toArray() })
+    expect((await exportBackup(a)).diario).toBeUndefined()
     const b = fresh()
     await importBackup(copia, 'reemplazar', b)
     expect((await b.diario.toArray())[0].kg).toBe(350)

@@ -9,21 +9,19 @@ import { useToast } from '../ui/toast'
 import { navigate } from '../ui/router'
 import { autoDetalle } from '../ui/offline'
 import type { NewBancalOpts } from '../ui/editor'
-import { COLORES, VARIEDADES } from '../domain/constants'
+import { COLORES } from '../domain/constants'
 import { useAction } from '../ui/useAction'
 
 type Captura = { estado: 'buscando'; acc: number | null; n: number } | { estado: 'error'; msg: string } | null
 
 export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBancalOpts; onClose: () => void }) {
-  const { bancales, rutas, diario, settings } = useData()
+  const { bancales, rutas, settings } = useData()
   const toast = useToast()
   const { busy, run } = useAction()
   const capture = useRef<AbortController | null>(null)
   const existing = id ? bancales.find((b) => b.id === id) : undefined
   const [nombre, setNombre] = useState(existing?.nombre ?? opts?.nombre ?? `Bancal ${bancales.length + 1}`)
   const [finca, setFinca] = useState(existing?.finca ?? opts?.finca ?? '')
-  const [olivos, setOlivos] = useState(existing?.olivos ? String(existing.olivos) : '')
-  const [variedad, setVariedad] = useState(existing?.variedad ?? '')
   const [nota, setNota] = useState(existing?.nota ?? '')
   const [color, setColor] = useState(existing?.color ?? opts?.color ?? COLORES[0].color)
   const [point, setPoint] = useState<LatLon | null>(existing ? [existing.lat, existing.lon] : (opts?.point ?? null))
@@ -31,7 +29,6 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
   const autoGps = !!opts?.gps && !existing
   const [captura, setCaptura] = useState<Captura>(autoGps ? { estado: 'buscando', acc: null, n: 0 } : null)
   const fincas = useMemo(() => [...new Set(bancales.map((b) => b.finca).filter(Boolean) as string[])].sort(), [bancales])
-  const olivosOk = !olivos || (Number.isSafeInteger(Number(olivos)) && Number(olivos) > 0)
 
   const startCapture = () => {
     capture.current?.abort()
@@ -61,15 +58,14 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
   }, [])
 
   const save = async () => {
-    if (!point || !olivosOk) return
+    if (!point) return
     const now = Date.now()
     const b: Bancal = {
+      ...existing,
       id: existing?.id ?? uid(),
       nombre: nombre.trim() || 'Bancal',
       finca: finca.trim() || undefined,
       nota: nota.trim() || undefined,
-      olivos: olivos ? Number(olivos) : undefined,
-      variedad: variedad.trim() || undefined,
       lat: point[0],
       lon: point[1],
       precision,
@@ -88,10 +84,9 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
   const remove = async () => {
     if (!existing) return
     const n = rutas.filter((r) => r.bancalId === existing.id).length
-    const apuntes = diario.filter((a) => a.bancalId === existing.id).length
     const ok = await toast.confirm({
       title: `¿Borrar «${existing.nombre}»?`,
-      message: n || apuntes ? `También se borrarán sus ${n} rutas guardadas y ${apuntes} apuntes del diario.` : undefined,
+      message: `También se borrarán sus fotos${n ? ` y ${n} rutas guardadas` : ''}.`,
       confirmLabel: 'Borrar',
       danger: true,
     })
@@ -113,7 +108,7 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
               Borrar
             </button>
           )}
-          <button className="btn primary block" disabled={busy || !point || !olivosOk || captura?.estado === 'buscando'} onClick={() => void run(save)}>
+          <button className="btn primary block" disabled={busy || !point || captura?.estado === 'buscando'} onClick={() => void run(save)}>
             {busy ? 'Guardando…' : 'Guardar'}
           </button>
         </>
@@ -160,7 +155,7 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
         <input className="input" value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder="Bancal de la balsa" />
       </label>
       <label className="field">
-        <span>Finca o partida</span>
+        <span>Grupo o zona</span>
         <input className="input" value={finca} onChange={(e) => setFinca(e.target.value)} list="fincas" placeholder="Opcional" />
         <datalist id="fincas">
           {fincas.map((f) => (
@@ -168,24 +163,9 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
           ))}
         </datalist>
       </label>
-      <div className="form-grid">
-        <label className="field">
-          <span>Olivos</span>
-          <input className="input num" inputMode="numeric" value={olivos} aria-invalid={!olivosOk} onChange={(e) => setOlivos(e.target.value.replace(/\D/g, ''))} placeholder="Opcional" />
-        </label>
-        <label className="field">
-          <span>Variedad</span>
-          <input className="input" value={variedad} onChange={(e) => setVariedad(e.target.value)} list="variedades" placeholder="Opcional" />
-          <datalist id="variedades">
-            {[...new Set([...bancales.map((b) => b.variedad).filter(Boolean), ...VARIEDADES])].map((v) => (
-              <option key={v} value={v} />
-            ))}
-          </datalist>
-        </label>
-      </div>
       <label className="field">
         <span>Nota</span>
-        <textarea className="textarea" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Por dónde se entra, riego, lindes…" />
+        <textarea className="textarea" value={nota} onChange={(e) => setNota(e.target.value)} placeholder="Entrada, punto de encuentro, referencias para reconocerlo…" />
       </label>
       <div className="field">
         <span className="field-label">Color</span>

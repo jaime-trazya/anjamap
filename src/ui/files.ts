@@ -44,3 +44,14 @@ export function pickFile(accept: string): Promise<File | null> {
 }
 
 export const today = () => toDateInput(Date.now())
+
+/** Comparte un archivo completo cuando el dispositivo lo permite; en escritorio lo descarga. */
+export async function shareFile(name: string, content: string, type: string) {
+  const file = new File([content], name, { type })
+  if (navigator.canShare?.({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: 'Bancales de Anjamap' }); return } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') return
+    }
+  }
+  await saveFile(name, content, type)
+}

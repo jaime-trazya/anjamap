@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Car, Footprints, List, LocateFixed, Map as MapIcon, MapPinPlus, NotebookPen, PenLine, Settings as SettingsIcon, Waypoints } from 'lucide-react'
+import { Car, Footprints, List, LocateFixed, Map as MapIcon, MapPinPlus, PenLine, Settings as SettingsIcon, Waypoints } from 'lucide-react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { DataProvider } from './ui/data'
 import { useData } from './ui/useData'
 import { ToastProvider } from './ui/Toaster'
 import { useToast } from './ui/toast'
-import { EditorCtx, type ApunteOpts, type EditorApi, type NewBancalOpts } from './ui/editor'
+import { EditorCtx, type EditorApi, type NewBancalOpts } from './ui/editor'
 import { navigate, routePath, useRoute } from './ui/router'
 import { lastFix } from './ui/position'
 import { setSetting } from './db/db'
@@ -14,9 +14,7 @@ import { MapScreen } from './screens/MapScreen'
 import { BancalesScreen } from './screens/Bancales'
 import { BancalDetail } from './screens/BancalDetail'
 import { BancalEditor } from './screens/BancalEditor'
-import { ApunteEditor } from './screens/ApunteEditor'
 import { Navigate } from './screens/Navigate'
-import { DiarioScreen } from './screens/Diario'
 import { CaminosScreen } from './screens/Caminos'
 import { LineDetail } from './screens/LineDetail'
 import { RecordScreen } from './screens/Record'
@@ -28,7 +26,6 @@ import { InstallGuide, InstallHint } from './screens/Install'
 const TABS = [
   { path: '/', label: 'Mapa', icon: MapIcon },
   { path: '/bancales', label: 'Bancales', icon: List },
-  { path: '/diario', label: 'Diario', icon: NotebookPen },
   { path: '/caminos', label: 'Caminos', icon: Waypoints },
   { path: '/ajustes', label: 'Ajustes', icon: SettingsIcon },
 ]
@@ -75,7 +72,6 @@ function AddSheet({ onClose, editor }: { onClose: () => void; editor: EditorApi 
   const items = [
     { icon: LocateFixed, title: 'Guardar bancal aquí', sub: 'Con el GPS, estando en el bancal', run: () => (onClose(), editor.openBancal(undefined, { gps: true })) },
     { icon: MapPinPlus, title: 'Marcar bancal en el mapa', sub: 'Desde casa, sobre el satélite', run: () => go('/dibujar?tipo=bancal') },
-    { icon: NotebookPen, title: 'Apuntar en el diario', sub: 'Poda, tratamiento, recolección…', run: () => (onClose(), editor.openApunte()) },
     {
       icon: Car,
       title: 'Dejar el coche aquí',
@@ -83,7 +79,7 @@ function AddSheet({ onClose, editor }: { onClose: () => void; editor: EditorApi 
       run: () => {
         onClose()
         const f = lastFix()
-        if (!f) return toast.show('Aún no hay señal GPS')
+        if (!f || Date.now() - f.t > 30000) return toast.show('Espera una posición GPS actualizada para guardar el coche')
         void setSetting('coche', { lat: f.p[0], lon: f.p[1], t: Date.now() })
         toast.show('Coche guardado aquí')
       },
@@ -116,12 +112,10 @@ function Shell() {
   const { ready } = useData()
   useTheme()
   const [bancalEdit, setBancalEdit] = useState<{ id?: string; opts?: NewBancalOpts; key: number } | null>(null)
-  const [apunte, setApunte] = useState<{ opts: ApunteOpts; key: number } | null>(null)
   const [adding, setAdding] = useState(false)
   const [editor] = useState<EditorApi>(() => ({
     openBancal: (id, opts) => setBancalEdit({ id, opts, key: Date.now() }),
     openAdd: () => setAdding(true),
-    openApunte: (opts = {}) => setApunte({ opts, key: Date.now() }),
   }))
 
   const fullScreen = /^\/(ir|grabar|dibujar)/.test(path)
@@ -141,7 +135,6 @@ function Shell() {
   else if (path === '/bancales') screen = <BancalesScreen />
   else if (seg[1] === 'bancal' && seg[2]) screen = <BancalDetail key={seg[2]} id={seg[2]} />
   else if (seg[1] === 'ir' && seg[2]) screen = <Navigate key={seg[2]} id={seg[2]} route={route} />
-  else if (path === '/diario') screen = <DiarioScreen key={route} route={route} />
   else if (path === '/caminos') screen = <CaminosScreen />
   else if ((seg[1] === 'camino' || seg[1] === 'ruta') && seg[2]) screen = <LineDetail key={path} kind={seg[1]} id={seg[2]} />
   else if (path === '/grabar') screen = <RecordScreen route={route} />
@@ -176,7 +169,6 @@ function Shell() {
         )}
         {adding && <AddSheet editor={editor} onClose={() => setAdding(false)} />}
         {bancalEdit && <BancalEditor key={bancalEdit.key} id={bancalEdit.id} opts={bancalEdit.opts} onClose={() => setBancalEdit(null)} />}
-        {apunte && <ApunteEditor key={apunte.key} opts={apunte.opts} onClose={() => setApunte(null)} />}
         {ready && <InstallHint />}
         <UpdatePrompt />
       </div>
