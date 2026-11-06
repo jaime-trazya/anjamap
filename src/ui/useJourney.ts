@@ -7,7 +7,8 @@ import type { Fix } from './position'
 interface State { key: string; journey: Journey | null; loading: boolean; error: string | null }
 
 /** Conserva el recorrido al perder cobertura y consulta de nuevo solo si hay un desvío real. */
-export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Transporte, options: RouteOptions, enabled: boolean) {
+/** `offRef` lo actualiza la pantalla: desvío confirmado por el seguimiento (varias lecturas seguidas fuera de la ruta). */
+export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Transporte, options: RouteOptions, enabled: boolean, offRef?: { readonly current: boolean }) {
   const latestFix = useRef(fix)
   useEffect(() => { latestFix.current = fix }, [fix])
   const [attempt, setAttempt] = useState(0)
@@ -32,9 +33,10 @@ export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Tran
         return
       }
       const hit = journey ? closestOnPath(f.p, journey.points) : null
-      if (!force && journey && hit && hit.dist <= Math.max(60, f.acc * 2)) return
-      // Una petición por cálculo y como mínimo 20 s entre recálculos. Los fallos requieren reintentar.
-      if (!force && (lastTry && (!journey || Date.now() - lastTry < 20000))) return
+      const off = !!offRef?.current
+      if (!force && journey && !off && hit && hit.dist <= Math.max(60, f.acc * 2)) return
+      // Una petición por cálculo: 8 s entre recálculos si el desvío está confirmado, 20 s si no. Los fallos requieren reintentar.
+      if (!force && (lastTry && (!journey || Date.now() - lastTry < (off ? 8000 : 20000)))) return
       pending = true; lastTry = Date.now()
       setState({ key, journey, loading: true, error: null })
       try {
@@ -49,7 +51,7 @@ export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Tran
     const online = () => void calculate(true)
     window.addEventListener('online', online)
     return () => { alive = false; controller.abort(); window.clearTimeout(initial); window.clearInterval(timer); window.removeEventListener('online', online) }
-  }, [key, lat, lon, transport, servidorRutas, evitarPeajes, evitarAutopistas, velocidadPatinete, enabled])
+  }, [key, lat, lon, transport, servidorRutas, evitarPeajes, evitarAutopistas, velocidadPatinete, enabled, offRef])
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
   const visible = state.key === key && enabled ? state : { journey: null, loading: false, error: null }
   return { ...visible, retry }

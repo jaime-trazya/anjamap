@@ -26,6 +26,18 @@ Por defecto se utiliza el servidor público de demostración de Valhalla/FOSSGIS
 
 Al calcular una ruta, el servidor recibe el origen, destino y preferencias. Las fotos y las copias no se suben a ese servidor.
 
+### Precisión al navegar
+
+- **Filtro de posición** ([src/domain/track.ts](src/domain/track.ts)): suaviza cada lectura según su precisión y descarta saltos imposibles para el transporte elegido (4 m/s a pie, 12 en patinete, 15 en bici y 45 en coche). La velocidad y el rumbo salen del movimiento real.
+- **Ajuste a la ruta**: si la separación cabe en el error del GPS, tu posición se pega a la ruta.
+- **Desvíos**: solo cuentan tras tres lecturas seguidas fuera de la ruta. El umbral depende del transporte y de la precisión. Con un desvío confirmado, la ruta se recalcula a los 8 s, en vez de esperar 20.
+- **Indicaciones**: siempre la siguiente y, si está cerca, también la de después («Luego: …»). La red local sin conexión también da indicaciones en los cruces.
+- **Mapa**:
+  - Lo recorrido se pinta en gris y lo que falta en naranja, con borde y flechas de sentido.
+  - Tu posición es una flecha de navegación.
+  - En coche, bici o patinete se ve la velocidad, y el zoom se ajusta a ella.
+- **Brújula**: solo en el modo «Línea recta». Con ruta se sigue el mapa.
+
 La ruta se calcula con conexión. Si se pierde cobertura durante la sesión, se conserva el trazado; los desvíos requieren conexión para recalcularse. La orientación local y los recorridos propios a pie funcionan sin conexión, pero pueden atravesar campo y no verifican restricciones de paso. La red local cubre la Canal de Navarrés y La Costera. El satélite se descarga desde Ajustes.
 
 ## Datos y fotos

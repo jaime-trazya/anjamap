@@ -23,29 +23,64 @@ export interface NavState {
   along: number
   offRoute: boolean
   arrived: boolean
+  /** Tu posición pegada a la ruta (la del GPS si estás fuera) */
+  snapped: LatLon
+  /** Metros entre tu posición y la ruta */
+  routeDist: number
 }
 
 /**
  * Calcula el estado de navegación. `lastAlong` evita que, en rutas que vuelven sobre sí mismas,
- * el seguimiento salte hacia atrás.
+ * el seguimiento salte hacia atrás. `offRouteAt` es la distancia a partir de la cual cuenta como desvío
+ * y `ahead`, los metros por delante a los que apunta la flecha (más cuanto más rápido vas).
  */
-export function navigate(pos: LatLon, route: LatLon[], dest: LatLon, lastAlong = 0, accuracy = 10): NavState {
+export function navigate(pos: LatLon, route: LatLon[], dest: LatLon, lastAlong = 0, accuracy = 10, offRouteAt = OFF_ROUTE, ahead = LOOKAHEAD): NavState {
   const straight = distance(pos, dest)
   const arrived = straight <= Math.max(ARRIVE, Math.min(accuracy, 25))
   const total = pathLength(route)
   if (route.length < 2 || arrived) {
-    return { target: dest, bearing: bearing(pos, dest), remaining: straight, straight, along: total, offRoute: false, arrived }
+    return { target: dest, bearing: bearing(pos, dest), remaining: straight, straight, along: total, offRoute: false, arrived, snapped: pos, routeDist: 0 }
   }
   let hit = closestOnPath(pos, route, lastAlong - 30)
   const global = closestOnPath(pos, route)
-  if (!hit || (global && hit.dist > OFF_ROUTE && global.dist < hit.dist)) hit = global
-  if (!hit) return { target: dest, bearing: bearing(pos, dest), remaining: straight, straight, along: 0, offRoute: false, arrived }
+  if (!hit || (global && hit.dist > offRouteAt && global.dist < hit.dist)) hit = global
+  if (!hit) return { target: dest, bearing: bearing(pos, dest), remaining: straight, straight, along: 0, offRoute: false, arrived, snapped: pos, routeDist: straight }
 
-  const offRoute = hit.dist > OFF_ROUTE
-  const ahead = Math.max(LOOKAHEAD, Math.min(accuracy, 30))
-  const target = offRoute ? hit.point : pointAlong(route, hit.along + ahead)
+  const offRoute = hit.dist > offRouteAt
+  const look = Math.max(ahead, Math.min(accuracy, 30))
+  const target = offRoute ? hit.point : pointAlong(route, hit.along + look)
   const remaining = hit.dist + (total - hit.along)
-  return { target, bearing: bearing(pos, target), remaining, straight, along: hit.along, offRoute, arrived }
+  // Pegar el punto a la ruta solo si la separación cabe en el error del GPS
+  const snapped = !offRoute && hit.dist <= Math.max(12, accuracy * 1.2) ? hit.point : pos
+  return { target, bearing: bearing(pos, target), remaining, straight, along: hit.along, offRoute, arrived, snapped, routeDist: hit.dist }
+}
+
+/**
+ * Seguimiento continuo: recuerda lo avanzado (solo crece) y solo da por desviado tras varias lecturas
+ * seguidas fuera de la ruta, así un rebote del GPS no dispara avisos ni recálculos.
+ */
+export class RouteTracker {
+  private key = ''
+  private route: LatLon[] | null = null
+  private along = 0
+  private offCount = 0
+  update(key: string, route: LatLon[], pos: LatLon, dest: LatLon, acc: number, offRouteBase: number, speed = 0, confirm = 3): NavState {
+    if (key !== this.key) {
+      this.key = key
+      this.along = 0
+      this.offCount = 0
+    }
+    if (route !== this.route) {
+      // Ruta recalculada: empieza en tu posición
+      if (this.route) this.along = 0
+      this.route = route
+    }
+    const threshold = Math.max(offRouteBase, acc * 1.5)
+    const s = navigate(pos, route, dest, this.along, acc, threshold, Math.max(LOOKAHEAD, speed * 4))
+    this.offCount = s.offRoute ? this.offCount + 1 : 0
+    if (!s.offRoute) this.along = Math.max(this.along, s.along)
+    return s.offRoute && this.offCount < confirm ? { ...s, offRoute: false } : s
+  }
 }
 
 /** Añade el bancal al final de una ruta guardada si no termina justo en él */

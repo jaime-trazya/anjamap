@@ -183,3 +183,19 @@ export function formatCoord(p: LatLon): string {
 export function walkMinutes(m: number): number {
   return Math.max(1, Math.round(m / (4000 / 60)))
 }
+
+/** Parte una ruta en lo recorrido y lo que falta, a `m` metros del inicio */
+export function splitRoute(r: LatLon[], m: number): [LatLon[], LatLon[]] {
+  if (m <= 0) return [[], r]
+  let acc = 0
+  for (let i = 1; i < r.length; i++) {
+    const d = distance(r[i - 1], r[i])
+    if (acc + d >= m) {
+      const t = d ? (m - acc) / d : 0
+      const p: LatLon = [r[i - 1][0] + (r[i][0] - r[i - 1][0]) * t, r[i - 1][1] + (r[i][1] - r[i - 1][1]) * t]
+      return [[...r.slice(0, i), p], [p, ...r.slice(i)]]
+    }
+    acc += d
+  }
+  return [r, [r[r.length - 1]]]
+}

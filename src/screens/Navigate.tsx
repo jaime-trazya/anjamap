@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowUp, Car, Check, Compass, CornerUpLeft, CornerUpRight, ExternalLink, LocateFixed, Route as RouteIcon, Volume2, VolumeX, X } from 'lucide-react'
 import { MapView } from '../map/MapView'
 import { angleDiff, bearing, distance, formatDistance, type LatLon } from '../lib/geo'
-import { recommend } from '../domain/graph'
-import { navigate as followRoute, nextStep, routeToDest, type NavState } from '../domain/nav'
+import { giroTexto, recommend, type Giro } from '../domain/graph'
+import { nextStep, RouteTracker, routeToDest } from '../domain/nav'
+import { MAX_SPEED, OFF_ROUTE_BASE, PositionFilter } from '../domain/track'
 import { formatDuration, remainingSeconds, TRANSPORT_LABELS } from '../domain/routing'
 import { setSetting } from '../db/db'
 import { useData } from '../ui/useData'
@@ -17,16 +18,13 @@ import { Empty, Sheet } from '../ui/components'
 import { TransportPicker } from '../ui/TransportPicker'
 import { useJourney } from '../ui/useJourney'
 
-class Progress {
-  private key = ''
-  private route: LatLon[] | null = null
-  private along = 0
-  update(key: string, route: LatLon[], pos: LatLon, dest: LatLon, acc: number): NavState {
-    if (key !== this.key || route !== this.route) { this.key = key; this.route = route; this.along = 0 }
-    const state = followRoute(pos, route, dest, this.along, acc)
-    if (!state.offRoute) this.along = Math.max(this.along, state.along)
-    return state
-  }
+/** Tipos de maniobra de Valhalla para las indicaciones de la red local (giros a izquierda y derecha) */
+const GIRO_TIPO: Record<Giro, number> = { izquierda: 15, 'izquierda-cerrada': 16, derecha: 10, 'derecha-cerrada': 11, coger: 8, dejar: 8 }
+
+/** Zoom al seguir según la velocidad: más lejos cuanto más rápido vas */
+function zoomFor(speed: number, transport: string): number {
+  if (transport === 'pie') return 18
+  return speed > 14 ? 16 : speed > 6 ? 17 : 18
 }
 
 function TurnIcon({ type }: { type?: number }) {
@@ -38,36 +36,56 @@ function TurnIcon({ type }: { type?: number }) {
 export function Navigate({ id, route: hash }: { id: string; route: string }) {
   const { bancales, rutas, caminos, settings } = useData()
   const { graph } = useGraph()
-  const { fix, error } = usePosition()
+  const { fix: raw, error } = usePosition()
+  const transport = settings.transporte
+  // Posición filtrada: sin saltos imposibles para el transporte y suavizada según la precisión
+  const [filter] = useState(() => new PositionFilter(MAX_SPEED[transport]))
+  const fix = useMemo(() => {
+    filter.setMaxSpeed(MAX_SPEED[transport])
+    return raw ? filter.push(raw) : null
+  }, [filter, raw, transport])
   const { heading, needsPermission, request } = useHeading(fix?.heading ?? null, fix?.speed ?? null)
   useWakeLock()
+  const offRef = useRef(false)
   const query = routeParams(hash).toString()
   const d = useMemo(() => resolverDestino(id, new URLSearchParams(query), bancales, settings.coche), [id, query, bancales, settings.coche])
   const lat = d?.p[0], lon = d?.p[1]
   const dest = useMemo<LatLon | null>(() => lat === undefined || lon === undefined ? null : [lat, lon], [lat, lon])
-  const transport = settings.transporte
   const requested = new URLSearchParams(query).get('ruta')
   const modo = transport === 'pie' ? (requested === 'local' ? 'local' : resolverModo(requested, rutas, id)) : 'recomendada'
   const saved = useMemo(() => rutas.find((r) => r.id === modo && r.bancalId === id), [rutas, modo, id])
   const local = modo === 'local' || modo === 'directa' || !!saved
-  const remote = useJourney(fix, dest, transport, settings, !local && !!dest)
+  const remote = useJourney(fix, dest, transport, settings, !local && !!dest, offRef)
   const [follow, setFollow] = useState(true)
   const [stepsOpen, setStepsOpen] = useState(false)
   const [optionsOpen, setOptionsOpen] = useState(false)
   const [fitKey, setFitKey] = useState('inicio')
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 5000); return () => window.clearInterval(timer) }, [])
+  // Red local sin conexión: se recalcula desde tu posición y también da indicaciones en los cruces
+  const localRec = useMemo(() => (fix && dest && modo === 'local' ? recommend(graph, fix.p, dest) : null), [fix, dest, modo, graph])
   const localRoute = useMemo(() => {
     if (!dest) return null
     if (saved) return routeToDest(saved.puntos, dest)
     if (!fix) return null
     if (modo === 'directa') return [fix.p, dest]
-    return modo === 'local' ? recommend(graph, fix.p, dest).points : null
-  }, [dest, saved, fix, modo, graph])
+    return localRec?.points ?? null
+  }, [dest, saved, fix, modo, localRec])
   const points = local ? localRoute : remote.journey?.points ?? null
-  const [progress] = useState(() => new Progress())
-  const nav = useMemo(() => fix && dest && points ? progress.update(`${id}/${modo}/${transport}`, points, fix.p, dest, fix.acc) : null, [progress, fix, dest, points, id, modo, transport])
-  const next = nav && remote.journey && !local ? nextStep(remote.journey.steps, nav.along) : null
+  const steps = useMemo(
+    () => (local ? (localRec?.steps.map((s) => ({ along: s.along, instruction: giroTexto(s.giro), type: GIRO_TIPO[s.giro] })) ?? []) : (remote.journey?.steps ?? [])),
+    [local, localRec, remote.journey],
+  )
+  const [tracker] = useState(() => new RouteTracker())
+  const nav = useMemo(
+    () => (fix && dest && points ? tracker.update(`${id}/${modo}/${transport}`, points, fix.p, dest, fix.acc, OFF_ROUTE_BASE[transport], fix.speed) : null),
+    [tracker, fix, dest, points, id, modo, transport],
+  )
+  useEffect(() => {
+    offRef.current = !!nav?.offRoute
+  }, [nav])
+  const next = nav ? nextStep(steps, nav.along) : null
+  const then = next ? steps.find((s) => s.along > next.paso.along + 3 && s.along - next.paso.along < 250) : undefined
   const stale = !!fix && now - fix.t > 30000
   const gpsOk = !!fix && !error && !stale && fix.acc <= 100
   const arrived = gpsOk && !!nav?.arrived
@@ -95,7 +113,7 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
   const tailGap = remote.journey?.tailGap ?? 0
   const startGap = fix && remote.journey && nav && nav.along < 10 ? distance(fix.p, remote.journey.points[0]) : 0
   const finalInstruction = remote.journey?.steps.at(-1)?.instruction
-  const instruction = arrived ? 'Has llegado al sitio' : !gpsOk ? error === 'denegado' ? 'Activa el permiso de ubicación' : 'Esperando señal GPS actualizada…' : remote.loading ? (points ? 'Recalculando ruta…' : 'Calculando ruta…') : nav?.offRoute ? local ? 'Vuelve a tu recorrido guardado' : 'Fuera de la ruta · solicita recalcular' : next?.paso.instruction ?? finalInstruction ?? (local ? saved ? 'Sigue tu recorrido guardado a pie' : 'Orientación a pie hacia el punto' : 'Elige transporte y calcula tu ruta')
+  const instruction = arrived ? 'Has llegado al sitio' : !gpsOk ? error === 'denegado' ? 'Activa el permiso de ubicación' : 'Esperando señal GPS actualizada…' : remote.loading ? (points ? 'Recalculando ruta…' : 'Calculando ruta…') : nav?.offRoute ? local ? 'Vuelve a tu recorrido guardado' : remote.loading ? 'Fuera de la ruta · recalculando…' : 'Fuera de la ruta · recalculando en unos segundos' : next?.paso.instruction ?? finalInstruction ?? (local ? saved ? 'Sigue tu recorrido guardado a pie' : 'Orientación a pie hacia el punto' : 'Elige transporte y calcula tu ruta')
   const externalMode = transport === 'coche' ? 'driving' : transport === 'pie' ? 'walking' : 'bicycling'
   const externalUrl = `https://www.google.com/maps/dir/?api=1&destination=${dest[0]},${dest[1]}&travelmode=${externalMode}`
   const chooseMode = (value: string) => { navigate(conModo(id, new URLSearchParams(query), value), true); setOptionsOpen(false) }
@@ -108,12 +126,13 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
     <div className="journey-transports"><TransportPicker value={transport} onChange={(value) => void setSetting('transporte', value)} /></div>
     <div className={`instr journey-instruction ${arrived ? 'now' : nav?.offRoute ? 'off' : ''}`} role="status">
       <span className="ic">{arrived ? <Check size={32} /> : <TurnIcon type={next?.paso.type} />}</span>
-      <div className="grow">{next && !arrived && <div className="d">{next.dist < 15 ? 'Ahora' : `En ${formatDistance(next.dist)}`}</div>}<div className="txt">{instruction}</div></div>
+      <div className="grow">{next && !arrived && <div className="d">{next.dist < 15 ? 'Ahora' : `En ${formatDistance(next.dist)}`}</div>}<div className="txt">{instruction}</div>{then && !arrived && !nav?.offRoute && <div className="journey-then">Luego: {then.instruction.charAt(0).toLowerCase() + then.instruction.slice(1)}</div>}</div>
     </div>
     <div className="journey-map">
-      <MapView capa={settings.capa} bancales={d.bancal ? [d.bancal] : []} caminos={local ? caminos : undefined} route={points} coche={settings.coche ? [settings.coche.lat, settings.coche.lon] : null} punto={d.tipo === 'punto' ? dest : null} user={fix} heading={heading} follow={follow} onUserPan={() => setFollow(false)} selectedId={d.bancal?.id} initial={{ center: fix?.p ?? dest, zoom: 17 }} fit={!follow ? points : null} fitKey={fitKey} />
-      <div className="journey-tools"><button className={`icon-btn float ${follow ? 'on' : ''}`} aria-label="Seguir mi posición" onClick={() => setFollow(true)}><LocateFixed size={22} /></button><button className="icon-btn float" aria-label="Ver ruta completa" disabled={!points} onClick={() => { setFollow(false); setFitKey(String(Date.now())) }}><RouteIcon size={22} /></button>{needsPermission && <button className="icon-btn float" aria-label="Activar brújula" onClick={() => void request()}><Compass size={21} /></button>}</div>
-      {local && nav && <div className="journey-arrow float" aria-label="Dirección al punto"><ArrowUp size={30} style={{ transform: `rotate(${angleDiff(bearing(fix!.p, nav.target) - (heading ?? 0))}deg)` }} /></div>}
+      <MapView capa={settings.capa} bancales={d.bancal ? [d.bancal] : []} caminos={local ? caminos : undefined} route={points} coche={settings.coche ? [settings.coche.lat, settings.coche.lon] : null} punto={d.tipo === 'punto' ? dest : null} user={fix ? { p: nav?.snapped ?? fix.p, acc: fix.acc } : null} heading={heading} navPuck routeDone={modo === 'directa' ? 0 : nav?.along} autoZoom={follow && fix ? zoomFor(fix.speed, transport) : null} follow={follow} onUserPan={() => setFollow(false)} selectedId={d.bancal?.id} initial={{ center: fix?.p ?? dest, zoom: 17 }} fit={!follow ? points : null} fitKey={fitKey} />
+      <div className="journey-tools"><button className={`icon-btn float ${follow ? 'on' : ''}`} aria-label="Seguir mi posición" onClick={() => setFollow(true)}><LocateFixed size={22} /></button><button className="icon-btn float" aria-label="Ver ruta completa" disabled={!points} onClick={() => { setFollow(false); setFitKey(String(Date.now())) }}><RouteIcon size={22} /></button>{modo === 'directa' && needsPermission && <button className="icon-btn float" aria-label="Activar brújula" onClick={() => void request()}><Compass size={21} /></button>}</div>
+      {modo === 'directa' && nav && fix && <div className="journey-arrow float" aria-label="Dirección al punto"><ArrowUp size={30} style={{ transform: `rotate(${angleDiff(bearing(fix.p, nav.target) - (heading ?? 0))}deg)` }} /></div>}
+      {transport !== 'pie' && fix && gpsOk && <div className="journey-speed float"><div className="figure num">{Math.round(fix.speed * 3.6)}</div><div className="meta">km/h</div></div>}
     </div>
     <section className="journey-panel">
       {transport === 'patinete' && <p className="journey-note">Patinete: trazado orientativo de bicicleta. No comprueba las restricciones específicas de VMP.</p>}
@@ -132,7 +151,7 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
     </section>
     {optionsOpen && <Sheet title="Opciones de la ruta" onClose={() => setOptionsOpen(false)}>
       <button className="btn primary block" onClick={() => chooseMode('recomendada')}>Ruta calculada por calles y caminos</button>
-      {transport === 'pie' && <><button className="btn block" onClick={() => chooseMode('local')}>Orientación local sin conexión</button><button className="btn block" onClick={() => chooseMode('directa')}>Flecha en línea recta</button>{rutas.filter((r) => r.bancalId === id).map((r) => <button className="btn block" key={r.id} onClick={() => chooseMode(r.id)}>{r.nombre} · recorrido propio</button>)}<p className="meta">La orientación local puede pasar campo a través. No comprueba accesos ni restricciones de paso.</p></>}
+      {transport === 'pie' && <><button className="btn block" onClick={() => chooseMode('local')}>Orientación local sin conexión</button><button className="btn block" onClick={() => chooseMode('directa')}>Línea recta con brújula</button>{rutas.filter((r) => r.bancalId === id).map((r) => <button className="btn block" key={r.id} onClick={() => chooseMode(r.id)}>{r.nombre} · recorrido propio</button>)}<p className="meta">La orientación local puede pasar campo a través. No comprueba accesos ni restricciones de paso.</p></>}
       <a className="btn block" href={externalUrl} target="_blank" rel="noreferrer"><ExternalLink size={18} /> Abrir en Google Maps{transport === 'patinete' ? ' · bicicleta' : ''}</a>
       {settings.coche && d.tipo !== 'coche' && <button className="btn block" onClick={() => navigate('/ir/coche', true)}><Car size={18} /> Volver al coche</button>}
     </Sheet>}

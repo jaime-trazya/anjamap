@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
 import type { Bancal, Camino, Ruta } from '../db/db'
-import type { LatLon } from '../lib/geo'
+import { splitRoute, type LatLon } from '../lib/geo'
 import type { Fix } from '../ui/position'
 import { COMARCAS } from '../domain/comarcas'
 import { osmLines, type OsmNet } from '../domain/osm'
@@ -82,9 +82,15 @@ export interface MapViewProps {
   coche?: LatLon | null
   /** Destino que no es un bancal (punto del mapa) */
   punto?: LatLon | null
-  user?: Fix | null
+  user?: Pick<Fix, 'p' | 'acc'> | null
   heading?: number | null
   follow?: boolean
+  /** Metros de `route` ya recorridos (se pintan en gris) */
+  routeDone?: number
+  /** Dibuja tu posición como flecha de navegación cuando hay rumbo */
+  navPuck?: boolean
+  /** Zoom al seguir tu posición (según la velocidad) */
+  autoZoom?: number | null
   /** Encuadra estos puntos cuando cambia `fitKey` */
   fit?: LatLon[] | null
   fitKey?: string
@@ -215,9 +221,13 @@ export function MapView(props: MapViewProps) {
     const lines = osmLines(props.red)
     const renderer = L.canvas({ pane: 'red', padding: 0.3 })
     const base = { pane: 'red', renderer, interactive: false, lineCap: 'round' as const, lineJoin: 'round' as const, smoothFactor: 1.5 }
-    L.polyline(lines[2], { ...base, color: '#ffffff', weight: 2.5, opacity: 0.55 }).addTo(ls.red)
-    L.polyline(lines[1], { ...base, color: '#ffffff', weight: 2, opacity: 0.45 }).addTo(ls.red)
-    L.polyline(lines[0], { ...base, color: '#fff0b8', weight: 2, opacity: 0.75, dashArray: '5 5' }).addTo(ls.red)
+    // Cada tipo con un borde oscuro debajo: así se leen igual sobre el satélite claro (calles) que sobre el monte
+    L.polyline(lines[2], { ...base, color: '#1c1f15', weight: 5.5, opacity: 0.35 }).addTo(ls.red)
+    L.polyline(lines[2], { ...base, color: '#ffd166', weight: 3, opacity: 0.85 }).addTo(ls.red)
+    L.polyline(lines[1], { ...base, color: '#1c1f15', weight: 4.5, opacity: 0.3 }).addTo(ls.red)
+    L.polyline(lines[1], { ...base, color: '#ffffff', weight: 2.5, opacity: 0.8 }).addTo(ls.red)
+    L.polyline(lines[0], { ...base, color: '#1c1f15', weight: 4, opacity: 0.35 }).addTo(ls.red)
+    L.polyline(lines[0], { ...base, color: '#fff0b8', weight: 2, opacity: 0.95, dashArray: '6 5' }).addTo(ls.red)
     const sync = () => {
       if (map.getZoom() >= RED_ZOOM) ls.red.addTo(map)
       else map.removeLayer(ls.red)
@@ -249,15 +259,56 @@ export function MapView(props: MapViewProps) {
     }
   }, [props.rutas])
 
+  // Ruta: lo ya recorrido en gris, lo que falta en naranja con borde y flechas de sentido
   useEffect(() => {
     const ls = layers.current
-    if (!ls) return
-    ls.route.clearLayers()
-    if (props.route && props.route.length > 1) {
-      L.polyline(props.route, { pane: 'route', color: '#ffffff', weight: 10, opacity: 0.95, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(ls.route)
-      L.polyline(props.route, { pane: 'route', color: '#e0531b', weight: 5.5, opacity: 1, interactive: false, lineCap: 'round', lineJoin: 'round' }).addTo(ls.route)
+    const map = mapRef.current
+    if (!ls || !map) return
+    const draw = () => {
+      ls.route.clearLayers()
+      const r = props.route
+      if (!r || r.length < 2) return
+      const [past, ahead] = splitRoute(r, props.routeDone ?? 0)
+      const z = map.getZoom()
+      const w = z >= 17 ? 7 : z >= 15 ? 6 : 5
+      const line = { pane: 'route', interactive: false, lineCap: 'round' as const, lineJoin: 'round' as const }
+      if (past.length > 1) {
+        L.polyline(past, { ...line, color: '#ffffff', weight: w + 2, opacity: 0.7 }).addTo(ls.route)
+        L.polyline(past, { ...line, color: '#7d8270', weight: w - 1, opacity: 0.9 }).addTo(ls.route)
+      }
+      if (ahead.length < 2) return
+      L.polyline(ahead, { ...line, color: '#1c1f15', weight: w + 7, opacity: 0.25 }).addTo(ls.route)
+      L.polyline(ahead, { ...line, color: '#ffffff', weight: w + 4, opacity: 1 }).addTo(ls.route)
+      L.polyline(ahead, { ...line, color: '#e0531b', weight: w, opacity: 1 }).addTo(ls.route)
+      // Flechas de sentido cada ~80 px de pantalla, solo en la zona visible
+      const view = map.getBounds().pad(0.25)
+      const px = ahead.map((p) => map.latLngToLayerPoint(p))
+      let carry = 40
+      let n = 0
+      for (let i = 1; i < px.length && n < 80; i++) {
+        const a = px[i - 1]
+        const b = px[i]
+        const seg = a.distanceTo(b)
+        let d = carry
+        while (d <= seg && n < 80) {
+          const t = d / seg
+          const ll = map.layerPointToLatLng(L.point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t))
+          if (view.contains(ll)) {
+            const deg = (Math.atan2(b.x - a.x, a.y - b.y) * 180) / Math.PI
+            L.marker(ll, { pane: 'route', interactive: false, keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: `<span class="route-chev" style="transform:translate(-50%,-50%) rotate(${(deg + 45).toFixed(0)}deg)"></span>` }) }).addTo(ls.route)
+            n++
+          }
+          d += 80
+        }
+        carry = d - seg
+      }
     }
-  }, [props.route])
+    draw()
+    map.on('zoomend', draw)
+    return () => {
+      map.off('zoomend', draw)
+    }
+  }, [props.route, props.routeDone])
 
   useEffect(() => {
     const ls = layers.current
@@ -310,16 +361,23 @@ export function MapView(props: MapViewProps) {
     ls.user.clearLayers()
     const u = props.user
     if (!u) return
-    L.circle(u.p, { pane: 'user', radius: u.acc, color: '#2f7cf6', weight: 1, opacity: 0.5, fillOpacity: 0.12, interactive: false }).addTo(ls.user)
-    const cone = props.heading !== null && props.heading !== undefined ? `<span class="me-cone" style="transform:rotate(${props.heading}deg)"></span>` : ''
-    L.marker(u.p, { pane: 'user', interactive: false, keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: `<div class="me">${cone}<span class="me-dot"></span></div>` }) }).addTo(ls.user)
-  }, [props.user, props.heading])
+    if (u.acc > 8) L.circle(u.p, { pane: 'user', radius: u.acc, color: '#2f7cf6', weight: 1, opacity: 0.5, fillOpacity: 0.12, interactive: false }).addTo(ls.user)
+    const h = props.heading
+    const html =
+      props.navPuck && h !== null && h !== undefined
+        ? // Navegando con rumbo: flecha azul que apunta hacia donde vas
+          `<div class="me-nav" style="transform:rotate(${h.toFixed(0)}deg)"><svg viewBox="0 0 40 40" width="40" height="40"><path d="M20 3 L34 35 L20 27 L6 35 Z"/></svg></div>`
+        : `<div class="me">${h !== null && h !== undefined ? `<span class="me-cone" style="transform:rotate(${h}deg)"></span>` : ''}<span class="me-dot"></span></div>`
+    L.marker(u.p, { pane: 'user', interactive: false, keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html }) }).addTo(ls.user)
+  }, [props.user, props.heading, props.navPuck])
 
   useEffect(() => {
     const map = mapRef.current
     if (!map || !props.follow || !props.user) return
-    map.panTo(props.user.p, { animate: true, duration: 0.4 })
-  }, [props.follow, props.user])
+    const z = props.autoZoom
+    if (z && Math.abs(map.getZoom() - z) >= 0.5) map.setView(props.user.p, z, { animate: true })
+    else map.panTo(props.user.p, { animate: true, duration: 0.4 })
+  }, [props.follow, props.user, props.autoZoom])
 
   useEffect(() => {
     const map = mapRef.current
