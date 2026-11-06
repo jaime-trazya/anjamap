@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  pages: write
 
 concurrency:
   group: pages
@@ -39,3 +40,13 @@ jobs:
           git add -A
           git commit -q -m "Publicar ${GITHUB_SHA::7}"
           git push -q -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages
+      # Pide a Pages que publique la rama recién subida. Si Pages no está en "Deploy from a branch → gh-pages",
+      # avisa en el registro: en ese modo la web no se actualiza.
+      - name: Publicar en Pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tipo=$(curl -s -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages" | grep -o '"build_type": *"[a-z]*"' || true)
+          echo "Pages: $tipo"
+          echo "$tipo" | grep -q legacy || echo "::warning::Pages no publica desde la rama gh-pages ($tipo). Cámbialo en Settings → Pages → Deploy from a branch → gh-pages."
+          curl -s -o /dev/null -w "Petición de publicación: %{http_code}\n" -X POST -H "Authorization: Bearer $GH_TOKEN" "https://api.github.com/repos/${GITHUB_REPOSITORY}/pages/builds" || true
