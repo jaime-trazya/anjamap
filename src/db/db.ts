@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import { isLatLon, type LatLon } from '../lib/geo'
+import { distance, isLatLon, type LatLon } from '../lib/geo'
 
 export const DB_NAME = 'anjamap'
 
@@ -17,6 +17,12 @@ export interface Bancal {
   /** Número de olivos */
   olivos?: number
   variedad?: string
+  /** Puerta o entrada exacta: a pie se navega hasta aquí */
+  acceso?: { lat: number; lon: number }
+  /** Dónde dejar el coche: en coche se navega hasta aquí y se sigue andando */
+  aparcamiento?: { lat: number; lon: number }
+  /** Sitio habitual, a un toque desde el mapa */
+  favorito?: boolean
   creado: number
   actualizado: number
 }
@@ -144,6 +150,10 @@ export interface Settings {
   evitarPeajes: boolean
   evitarAutopistas: boolean
   voz: boolean
+  /** Al navegar, el mapa gira para que hacia donde vas quede arriba */
+  mapaGira: boolean
+  /** Últimos sitios a los que has navegado (ids de bancal, el más reciente primero) */
+  recientes: string[]
   velocidadPatinete: number
   servidorRutas: string
 }
@@ -159,7 +169,9 @@ export const DEFAULT_SETTINGS: Settings = {
   transporte: 'pie',
   evitarPeajes: false,
   evitarAutopistas: false,
-  voz: false,
+  voz: true,
+  mapaGira: true,
+  recientes: [],
   velocidadPatinete: 15,
   servidorRutas: 'https://valhalla1.openstreetmap.de',
 }
@@ -193,7 +205,7 @@ export async function exportBackup(database = db, ids?: string[]): Promise<Backu
     const [all, caminos, allRutas, allFotos] = await Promise.all([database.bancales.toArray(), database.caminos.toArray(), database.rutas.toArray(), database.fotos.toArray()])
     const selected = ids ? new Set(ids) : null
     // Las nuevas copias contienen los datos del lugar, sin los antiguos campos agrícolas.
-    const bancales = all.filter((b) => !selected || selected.has(b.id)).map(({ id, nombre, finca, nota, lat, lon, precision, color, creado, actualizado }) => ({ id, nombre, finca, nota, lat, lon, precision, color, creado, actualizado }))
+    const bancales = all.filter((b) => !selected || selected.has(b.id)).map(({ id, nombre, finca, nota, lat, lon, precision, color, acceso, aparcamiento, favorito, creado, actualizado }) => ({ id, nombre, finca, nota, lat, lon, precision, color, acceso, aparcamiento, favorito, creado, actualizado }))
     const included = new Set(bancales.map((b) => b.id))
     return { app: 'anjamap' as const, version: 3 as const, fecha: new Date().toISOString(), bancales, caminos: selected ? [] : caminos, rutas: allRutas.filter((r) => included.has(r.bancalId)), fotos: allFotos.filter((f) => included.has(f.bancalId)) }
   })
@@ -204,6 +216,7 @@ const text = (x: unknown): x is string => typeof x === 'string' && x.trim().leng
 const optionalText = (x: unknown) => x === undefined || typeof x === 'string'
 const nonnegative = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x) && x >= 0
 const timestamp = (x: unknown): x is number => nonnegative(x) && Number.isFinite(new Date(x).getTime())
+const optionalPoint = (x: unknown) => x === undefined || (record(x) && isLatLon([x.lat, x.lon]))
 const apunteTypes = new Set<TipoApunte>(['poda', 'tratamiento', 'abono', 'riego', 'desbroce', 'recoleccion', 'visita', 'otro'])
 
 function validApunte(x: Record<string, unknown>): boolean {
@@ -232,6 +245,7 @@ export function validateBackup(data: unknown): Backup {
     if (!text(x.nombre) || !isLatLon([x.lat, x.lon]) || !timestamp(x.creado) || !timestamp(x.actualizado) ||
       !(x.precision === null || nonnegative(x.precision)) || typeof x.color !== 'string' || !/^#(?:[\da-f]{3}|[\da-f]{6})$/i.test(x.color) ||
       !optionalText(x.finca) || !optionalText(x.nota) || !optionalText(x.variedad) ||
+      !optionalPoint(x.acceso) || !optionalPoint(x.aparcamiento) || !(x.favorito === undefined || typeof x.favorito === 'boolean') ||
       (x.olivos !== undefined && !(Number.isSafeInteger(x.olivos) && x.olivos >= 0))) throw new Error('Copia dañada: datos de bancal no válidos')
   }
   const bancales = new Set(data.bancales.map((x) => x.id))
@@ -246,16 +260,39 @@ export function validateBackup(data: unknown): Backup {
   return { ...data, diario, fotos } as unknown as Backup
 }
 
-/** Restaura una copia. "fusionar" añade y actualiza; "reemplazar" borra lo actual primero. */
-export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', database = db) {
+const mismoNombre = (a: string, b: string) => a.trim().toLocaleLowerCase('es') === b.trim().toLocaleLowerCase('es')
+
+/**
+ * Restaura una copia. "fusionar" añade y actualiza; "reemplazar" borra lo actual primero.
+ * Al fusionar no se duplican sitios: si ya tienes uno con el mismo nombre a menos de 5 m, se conserva el tuyo
+ * (y sus rutas y fotos nuevas se le asignan). Lo que viene de un GPX y ya estaba importado no pisa tus cambios.
+ * Devuelve cuántos sitios repetidos se han saltado.
+ */
+export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', database = db): Promise<{ repetidos: number }> {
   b = validateBackup(b)
-  await database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario, database.fotos], async () => {
+  return database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario, database.fotos], async () => {
     if (modo === 'reemplazar') await Promise.all([database.bancales.clear(), database.caminos.clear(), database.rutas.clear(), database.diario.clear(), database.fotos.clear()])
-    await database.bancales.bulkPut(b.bancales)
-    await database.caminos.bulkPut(b.caminos)
-    await database.rutas.bulkPut(b.rutas)
-    await database.diario.bulkPut(b.diario ?? [])
-    await database.fotos.bulkPut(b.fotos ?? [])
+    let { bancales, caminos } = b
+    const remap = new Map<string, string>()
+    if (modo === 'fusionar') {
+      const existentes = await database.bancales.toArray()
+      const ids = new Set(existentes.map((e) => e.id))
+      bancales = bancales.filter((x) => {
+        if (x.id.startsWith('gpx-') && ids.has(x.id)) return false
+        const dup = existentes.find((e) => e.id !== x.id && mismoNombre(e.nombre, x.nombre) && distance([e.lat, e.lon], [x.lat, x.lon]) < 5)
+        if (dup) remap.set(x.id, dup.id)
+        return !dup
+      })
+      const caminoIds = new Set((await database.caminos.toArray()).map((c) => c.id))
+      caminos = caminos.filter((c) => !(c.id.startsWith('gpx-') && caminoIds.has(c.id)))
+    }
+    const fix = <T extends { bancalId: string }>(rows: T[]) => rows.map((r) => (remap.has(r.bancalId) ? { ...r, bancalId: remap.get(r.bancalId)! } : r))
+    await database.bancales.bulkPut(bancales)
+    await database.caminos.bulkPut(caminos)
+    await database.rutas.bulkPut(fix(b.rutas))
+    await database.diario.bulkPut(fix(b.diario ?? []))
+    await database.fotos.bulkPut(fix(b.fotos ?? []))
+    return { repetidos: b.bancales.length - bancales.length }
   })
 }
 
@@ -271,13 +308,34 @@ export async function addRuta(r: Omit<Ruta, 'id' | 'creado'>, database = db): Pr
   return id
 }
 
-/** Borra un bancal, sus rutas y su diario */
-export async function deleteBancal(id: string, database = db) {
-  await database.transaction('rw', [database.bancales, database.rutas, database.diario, database.fotos], async () => {
+/** Lo que se borra con un bancal, para poder deshacerlo */
+export interface Borrado {
+  bancal: Bancal
+  rutas: Ruta[]
+  fotos: Foto[]
+  diario: Apunte[]
+}
+
+/** Borra un bancal, sus rutas, fotos y diario. Devuelve lo borrado para poder deshacerlo. */
+export async function deleteBancal(id: string, database = db): Promise<Borrado | null> {
+  return database.transaction('rw', [database.bancales, database.rutas, database.diario, database.fotos], async () => {
+    const bancal = await database.bancales.get(id)
+    const [rutas, fotos, diario] = await Promise.all([database.rutas.where('bancalId').equals(id).toArray(), database.fotos.where('bancalId').equals(id).toArray(), database.diario.where('bancalId').equals(id).toArray()])
     await database.rutas.where('bancalId').equals(id).delete()
     await database.diario.where('bancalId').equals(id).delete()
     await database.fotos.where('bancalId').equals(id).delete()
     await database.bancales.delete(id)
+    return bancal ? { bancal, rutas, fotos, diario } : null
+  })
+}
+
+/** Deshace un borrado */
+export async function restoreBancal(b: Borrado, database = db) {
+  await database.transaction('rw', [database.bancales, database.rutas, database.diario, database.fotos], async () => {
+    await database.bancales.put(b.bancal)
+    await database.rutas.bulkPut(b.rutas)
+    await database.fotos.bulkPut(b.fotos)
+    await database.diario.bulkPut(b.diario)
   })
 }
 

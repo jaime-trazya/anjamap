@@ -108,7 +108,7 @@
 .journey-instruction .txt { font-size: 16px; line-height: 1.25; }
 .journey-instruction .d { font-size: 26px; }
 .journey-map { position: relative; flex: 1; min-height: 80px; }
-.journey-tools { position: absolute; z-index: 800; right: calc(12px + var(--safe-right)); bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.journey-tools { position: absolute; z-index: 1001; right: calc(12px + var(--safe-right)); bottom: 26px; display: flex; flex-direction: column; gap: 8px; }
 .journey-tools .icon-btn { border-radius: 13px; }
 .journey-arrow { position: absolute; z-index: 800; left: 12px; bottom: 12px; width: 54px; height: 54px; display: grid; place-items: center; border-radius: 16px; color: var(--signal); }
 .journey-panel { padding: 12px calc(16px + var(--safe-right)) calc(12px + var(--safe-bottom)) calc(16px + var(--safe-left)); flex: none; display: flex; flex-direction: column; gap: 10px; max-height: 42dvh; overflow-y: auto; border-top: 1px solid var(--line); }
@@ -126,3 +126,41 @@
 .journey-speed { position: absolute; z-index: 800; left: 12px; top: 12px; min-width: 62px; padding: 6px 10px; border-radius: 14px; text-align: center; }
 .journey-speed .figure { font-size: 26px; }
 .journey-speed .meta { font-size: 11px; margin-top: 1px; }
+
+/* Mapa girable al navegar: lienzo cuadrado más grande que la pantalla, girado alrededor del centro */
+.map-rot { overflow: hidden; }
+.map-rot-inner { position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform-origin: 50% 50%; transition: transform 600ms linear; will-change: transform; }
+.map-rot > .leaflet-bottom { position: absolute; }
+@media (prefers-reduced-motion: reduce) { .map-rot-inner { transition: none; } }
+
+/* Salida de una ruta planificada */
+.origin-pin { display: block; width: 18px; height: 18px; transform: translate(-50%, -50%); border-radius: 50%; background: #2f9e44; border: 3px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.45); }
+
+/* Foto del sitio al llegar */
+.journey-photo { display: flex; gap: 10px; align-items: center; margin: 0; }
+.journey-photo img { width: 92px; height: 70px; object-fit: cover; border-radius: 10px; flex: none; }
+.journey-photo figcaption { font-size: 14px; font-weight: 600; }
+
+/* Planificar ruta */
+.plan-fields { display: flex; align-items: center; gap: 8px; padding: 0 calc(12px + var(--safe-right)) 8px calc(12px + var(--safe-left)); flex: none; }
+.plan-stack { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.plan-field { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 6px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); text-align: left; min-width: 0; }
+.plan-field.on { border-color: var(--signal); box-shadow: 0 0 0 2px color-mix(in srgb, var(--signal) 30%, transparent); }
+.plan-field .grow { display: flex; flex-direction: column; min-width: 0; }
+.plan-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.plan-value { font-size: 16px; font-weight: 600; }
+.plan-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); }
+.plan-dot.desde { background: #2f9e44; }
+.plan-dot.hasta { background: #e0531b; }
+.plan-hint { position: absolute; z-index: 800; left: 12px; right: 12px; top: 12px; display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 12px; border-radius: 14px; font-size: 14px; font-weight: 600; }
+.plan-hint .btn { margin-left: auto; }
+.plan-compare { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.plan-compare button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 12px; background: var(--sunken); border: 1px solid transparent; font-size: 12px; color: var(--ink-2); }
+.plan-compare button strong { font-size: 15px; color: var(--ink); }
+.plan-compare button[aria-pressed='true'] { border-color: var(--signal); background: var(--surface); }
+@media (max-height: 600px) { .plan-field { min-height: 40px; padding: 3px 10px; } .plan-label { display: none; } }
+
+/* Favoritos a un toque en el mapa */
+.fav-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
+.fav-row::-webkit-scrollbar { display: none; }
+.fav-chip { display: flex; align-items: center; gap: 6px; flex: none; max-width: 180px; height: 40px; padding: 0 12px; border-radius: 20px; font-size: 14px; font-weight: 600; }

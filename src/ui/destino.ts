@@ -1,4 +1,4 @@
-import type { Bancal, Settings } from '../db/db'
+import type { Bancal, Settings, Transporte } from '../db/db'
 import { isLatLon, type LatLon } from '../lib/geo'
 
 /** A dónde se navega: un bancal, el coche o un punto cualquiera del mapa */
@@ -8,9 +8,18 @@ export interface Destino {
   p: LatLon
   color: string
   bancal?: Bancal
+  /** A qué parte del sitio se va: su aparcamiento (en coche), su entrada (a pie) o el punto guardado */
+  etapa?: 'aparcamiento' | 'acceso' | 'sitio'
 }
 
-export function resolverDestino(id: string, params: URLSearchParams, bancales: Bancal[], coche: Settings['coche']): Destino | null {
+/** Punto al que navegar dentro de un sitio según el transporte */
+export function puntoDeLlegada(b: Bancal, transporte?: Transporte): { p: LatLon; etapa: 'aparcamiento' | 'acceso' | 'sitio' } {
+  if (transporte && transporte !== 'pie' && b.aparcamiento) return { p: [b.aparcamiento.lat, b.aparcamiento.lon], etapa: 'aparcamiento' }
+  if (b.acceso) return { p: [b.acceso.lat, b.acceso.lon], etapa: 'acceso' }
+  return { p: [b.lat, b.lon], etapa: 'sitio' }
+}
+
+export function resolverDestino(id: string, params: URLSearchParams, bancales: Bancal[], coche: Settings['coche'], transporte?: Transporte): Destino | null {
   if (id === 'coche') return coche ? { tipo: 'coche', nombre: 'El coche', p: [coche.lat, coche.lon], color: '#1c1f15' } : null
   if (id === 'punto') {
     const lat = Number(params.get('lat'))
@@ -19,7 +28,66 @@ export function resolverDestino(id: string, params: URLSearchParams, bancales: B
     return { tipo: 'punto', nombre: params.get('n') || 'Punto del mapa', p: [lat, lon], color: '#e0531b' }
   }
   const b = bancales.find((x) => x.id === id)
-  return b ? { tipo: 'bancal', nombre: b.nombre, p: [b.lat, b.lon], color: b.color, bancal: b } : null
+  if (!b) return null
+  const llegada = puntoDeLlegada(b, transporte)
+  return { tipo: 'bancal', nombre: b.nombre, p: llegada.p, color: b.color, bancal: b, etapa: llegada.etapa }
+}
+
+/**
+ * Lugar de una ruta planificada, codificado en la dirección:
+ * `yo` (tu posición), `coche`, `b:<id>` (un sitio) o `p:lat,lon` (un punto del mapa).
+ */
+export function codigoLugar(l: { tipo: 'yo' } | { tipo: 'coche' } | { tipo: 'bancal'; id: string } | { tipo: 'punto'; p: LatLon }): string {
+  if (l.tipo === 'bancal') return `b:${l.id}`
+  if (l.tipo === 'punto') return `p:${l.p[0].toFixed(6)},${l.p[1].toFixed(6)}`
+  return l.tipo
+}
+
+export interface Lugar {
+  codigo: string
+  nombre: string
+  /** null = tu posición aún sin GPS */
+  p: LatLon | null
+  bancal?: Bancal
+}
+
+export function resolverLugar(codigo: string | null, bancales: Bancal[], coche: Settings['coche'], miPos: LatLon | null, transporte?: Transporte): Lugar | null {
+  if (!codigo) return null
+  if (codigo === 'yo') return { codigo, nombre: 'Tu ubicación', p: miPos }
+  if (codigo === 'coche') return coche ? { codigo, nombre: 'El coche', p: [coche.lat, coche.lon] } : null
+  if (codigo.startsWith('b:')) {
+    const b = bancales.find((x) => x.id === codigo.slice(2))
+    return b ? { codigo, nombre: b.nombre, p: puntoDeLlegada(b, transporte).p, bancal: b } : null
+  }
+  if (codigo.startsWith('p:')) {
+    const p = leerCoordenadas(codigo.slice(2))
+    return p ? { codigo, nombre: `Punto ${p[0].toFixed(4)}, ${p[1].toFixed(4)}`, p } : null
+  }
+  return null
+}
+
+/**
+ * Coordenadas escritas o pegadas: «39.1234, -0.6789», «39,1234 -0,6789», enlaces de Google Maps (@lat,lon o q=lat,lon)
+ * y grados, minutos y segundos (39°05'12.3"N 0°41'10.1"W).
+ */
+export function leerCoordenadas(texto: string): LatLon | null {
+  const s = texto.trim()
+  if (!s) return null
+  const dms = [...s.matchAll(/(\d{1,3})\s*[°º]\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:["″]|'')?\s*([NSEWO])/gi)]
+  if (dms.length === 2) {
+    const val = (m: RegExpMatchArray) => {
+      const v = Number(m[1]) + Number(m[2]) / 60 + Number(m[3].replace(',', '.')) / 3600
+      return /[SWO]/i.test(m[4]) ? -v : v
+    }
+    const [a, b] = dms
+    const p: LatLon = /[NS]/i.test(a[4]) ? [val(a), val(b)] : [val(b), val(a)]
+    return isLatLon(p) ? p : null
+  }
+  const link = s.match(/[@=](-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/)
+  const plain = link ?? s.match(/^(-?\d{1,2}(?:[.,]\d+)?)\s*[,;\s]\s*(-?\d{1,3}(?:[.,]\d+)?)$/)
+  if (!plain) return null
+  const p: LatLon = [Number(plain[1].replace(',', '.')), Number(plain[2].replace(',', '.'))]
+  return isLatLon(p) && (Math.abs(p[0]) > 0.0001 || Math.abs(p[1]) > 0.0001) ? p : null
 }
 
 /** Si se ha borrado la ruta elegida, la navegación sigue funcionando con la recomendada. */

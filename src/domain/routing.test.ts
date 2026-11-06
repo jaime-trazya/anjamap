@@ -114,3 +114,29 @@ describe('peticiones al servidor de rutas', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+describe('flechas de las maniobras', () => {
+  it('no confunde una incorporación recta con un giro', async () => {
+    const { maniobra } = await import('./routing')
+    expect(maniobra(17)).toBe('recto')
+    expect(maniobra(22)).toBe('recto')
+    expect(maniobra(15)).toBe('izquierda')
+    expect(maniobra(14)).toBe('izquierda')
+    expect(maniobra(16)).toBe('ligera-izquierda')
+    expect(maniobra(10)).toBe('derecha')
+    expect(maniobra(20)).toBe('ligera-derecha')
+    expect(maniobra(12)).toBe('media-vuelta')
+    expect(maniobra(13)).toBe('media-vuelta')
+    expect(maniobra(26)).toBe('rotonda')
+    expect(maniobra(4)).toBe('llegada')
+    expect(maniobra(undefined)).toBe('recto')
+  })
+})
+
+describe('recalcular hacia delante', () => {
+  it('manda el rumbo de marcha para que la ruta no te haga dar la vuelta', () => {
+    const r = routeRequest([39.1, -0.69], [39.2, -0.7], 'coche', DEFAULT_SETTINGS, -90)
+    expect(r.locations[0]).toMatchObject({ heading: 270, heading_tolerance: 45 })
+    expect(routeRequest([39.1, -0.69], [39.2, -0.7], 'coche', DEFAULT_SETTINGS).locations[0]).not.toHaveProperty('heading')
+  })
+})

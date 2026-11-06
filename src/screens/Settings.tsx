@@ -6,7 +6,8 @@ import { COMARCAS } from '../domain/comarcas'
 import { routeEndpoint } from '../domain/routing'
 import { AVG_TILE_BYTES, borrarTeselas, cancelarDescarga, espacio, formatBytes, hasCacheApi } from '../map/tiles'
 import { useData } from '../ui/useData'
-import { descargarComarca, descargarDetalle, NIVELES, tilesComarca, tilesDetalle, useDescarga, type Nivel } from '../ui/offline'
+import { descargarComarca, descargarDetalle, zonaId, NIVELES, tilesComarca, tilesDetalle, useDescarga, type Nivel } from '../ui/offline'
+import { desbloquearVoz, hablar } from '../ui/voz'
 import { useToast } from '../ui/toast'
 import { Segmented, Switch } from '../ui/components'
 import { useAction } from '../ui/useAction'
@@ -25,7 +26,8 @@ export function SettingsScreen() {
     <div className="section"><h2>Navegación</h2></div>
     <section className="card stack">
       <div className="field"><span className="field-label">Transporte habitual</span><TransportPicker value={settings.transporte} onChange={(value) => void setSetting('transporte', value)} /></div>
-      <div className="check-row"><div className="grow"><div>Indicaciones por voz</div><p className="meta">Lee el siguiente giro mientras sigues la ruta.</p></div><Switch label="Indicaciones por voz" checked={settings.voz} onChange={(value) => void setSetting('voz', value)} /></div>
+      <div className="check-row"><div className="grow"><div>Indicaciones por voz</div><p className="meta">Lee el siguiente giro mientras sigues la ruta.</p></div><Switch label="Indicaciones por voz" checked={settings.voz} onChange={(value) => { desbloquearVoz(); if (value) hablar('Indicaciones por voz activadas'); void setSetting('voz', value) }} /></div>
+      <div className="check-row"><div className="grow"><div>Girar el mapa hacia donde vas</div><p className="meta">Al navegar, lo que tienes delante queda arriba. Si mueves el mapa con el dedo, vuelve al norte.</p></div><Switch label="Girar el mapa hacia donde vas" checked={settings.mapaGira} onChange={(value) => void setSetting('mapaGira', value)} /></div>
       <div className="check-row"><div className="grow"><div>Preferir rutas sin peajes</div><p className="meta">En coche. Se avisará si la ruta aún incluye alguno.</p></div><Switch label="Preferir rutas sin peajes" checked={settings.evitarPeajes} onChange={(value) => void setSetting('evitarPeajes', value)} /></div>
       <div className="check-row"><div className="grow"><div>Preferir rutas sin autopistas</div><p className="meta">En coche. Puede ser necesario usarlas para llegar.</p></div><Switch label="Preferir rutas sin autopistas" checked={settings.evitarAutopistas} onChange={(value) => void setSetting('evitarAutopistas', value)} /></div>
       <label className="field"><span>Velocidad de referencia del patinete</span><select className="select" value={settings.velocidadPatinete} onChange={(e) => void setSetting('velocidadPatinete', Number(e.target.value))}>{[10, 15, 20, 25].map((v) => <option key={v} value={v}>{v} km/h</option>)}</select></label>
@@ -55,7 +57,7 @@ export function SettingsScreen() {
 }
 
 function OfflineSection() {
-  const { bancales, caminos } = useData()
+  const { bancales, caminos, settings } = useData()
   const toast = useToast()
   const d = useDescarga()
   const zonas = useLiveQuery(() => db.zonas.toArray()) ?? []
@@ -88,7 +90,7 @@ function OfflineSection() {
       message: `Nivel ${NIVELES[nivel].nombre.toLowerCase()}: ${n.toLocaleString('es-ES')} teselas, unos ${formatBytes(n * AVG_TILE_BYTES)}. Hazlo con wifi y la app abierta; puedes seguir usándola mientras.`,
       confirmLabel: 'Descargar',
     })
-    if (ok) await lanzar(() => descargarComarca(id, nivel), `${c.nombre} disponible sin conexión`)
+    if (ok) await lanzar(() => descargarComarca(id, nivel, settings.capa), `${c.nombre} disponible sin conexión`)
   }
 
   const nDetalle = useMemo(() => tilesDetalle(bancales, caminos).length, [bancales, caminos])
@@ -130,8 +132,8 @@ function OfflineSection() {
       )}
       <section className="card flush list">
         {COMARCAS.map((c) => {
-          const hecho = (['detallado', 'basico'] as Nivel[]).find((n) => zonas.some((z) => z.id === `${c.id}-${n}` && z.guardadas === z.total))
-          const parcial = zonas.find((z) => z.id.startsWith(`${c.id}-`) && z.guardadas < z.total)
+          const hecho = (['detallado', 'basico'] as Nivel[]).find((n) => zonas.some((z) => z.id === zonaId(`${c.id}-${n}`, settings.capa) && z.guardadas === z.total))
+          const parcial = zonas.find((z) => (['detallado', 'basico'] as Nivel[]).some((n) => z.id === zonaId(`${c.id}-${n}`, settings.capa)) && z.guardadas < z.total)
           return (
             <div key={c.id} className="list-item" style={{ flexWrap: 'wrap' }}>
               <span className="tile sm" style={{ '--c': 'var(--olive)' } as React.CSSProperties}>
@@ -161,7 +163,7 @@ function OfflineSection() {
               {nDetalle ? `250 m alrededor de cada bancal y a lo largo de los caminos · ~${formatBytes(nDetalle * AVG_TILE_BYTES)}` : 'Guarda algún bancal o camino primero'}
             </div>
           </div>
-          <button className="btn small primary" disabled={descargando || !nDetalle} onClick={() => void lanzar(() => descargarDetalle(bancales, caminos), 'Detalle guardado')}>
+          <button className="btn small primary" disabled={descargando || !nDetalle} onClick={() => void lanzar(() => descargarDetalle(bancales, caminos, settings.capa), 'Detalle guardado')}>
             Descargar
           </button>
         </div>

@@ -78,3 +78,35 @@ export class PositionFilter {
     return (this.state = { p, acc, t: f.t, speed, heading, rejected: false })
   }
 }
+
+/**
+ * Apunta el recorrido que vas haciendo: solo lecturas buenas, posteriores a `desde`, y separadas
+ * al menos unos metros (más cuanto peor es la precisión) para no llenar la línea de ruido.
+ * `push` devuelve la misma lista si no ha añadido nada.
+ */
+export class TrailRecorder {
+  points: LatLon[] = []
+  private lastT = -1
+  constructor(private desde: number, private maxAcc = 25) {}
+
+  push(f: Pick<TrackFix, 'p' | 'acc' | 't' | 'rejected'>): LatLon[] {
+    if (f.t === this.lastT || f.rejected || f.acc > this.maxAcc || f.t < this.desde - 1000) return this.points
+    this.lastT = f.t
+    const last = this.points[this.points.length - 1]
+    if (last && distance(last, f.p) < Math.max(4, f.acc / 3)) return this.points
+    this.points = [...this.points, f.p]
+    return this.points
+  }
+}
+
+/** Parte una grabación en tramos por los cortes (índices donde empieza un tramo nuevo); descarta los de un solo punto */
+export function tramos(puntos: LatLon[], cortes: number[] = []): LatLon[][] {
+  const out: LatLon[][] = []
+  let start = 0
+  for (const c of [...cortes].sort((a, b) => a - b)) {
+    out.push(puntos.slice(start, c))
+    start = c
+  }
+  out.push(puntos.slice(start))
+  return out.filter((t) => t.length >= 2)
+}

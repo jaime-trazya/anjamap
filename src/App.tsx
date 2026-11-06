@@ -15,6 +15,7 @@ import { BancalesScreen } from './screens/Bancales'
 import { BancalDetail } from './screens/BancalDetail'
 import { BancalEditor } from './screens/BancalEditor'
 import { Navigate } from './screens/Navigate'
+import { PlanScreen } from './screens/Planificar'
 import { CaminosScreen } from './screens/Caminos'
 import { LineDetail } from './screens/LineDetail'
 import { RecordScreen } from './screens/Record'
@@ -118,7 +119,7 @@ function Shell() {
     openAdd: () => setAdding(true),
   }))
 
-  const fullScreen = /^\/(ir|grabar|dibujar)/.test(path)
+  const fullScreen = /^\/(ir|grabar|dibujar|planificar)/.test(path)
   const tab =
     path === '/'
       ? '/'
@@ -135,6 +136,7 @@ function Shell() {
   else if (path === '/bancales') screen = <BancalesScreen />
   else if (seg[1] === 'bancal' && seg[2]) screen = <BancalDetail key={seg[2]} id={seg[2]} />
   else if (seg[1] === 'ir' && seg[2]) screen = <Navigate key={seg[2]} id={seg[2]} route={route} />
+  else if (path === '/planificar') screen = <PlanScreen route={route} />
   else if (path === '/caminos') screen = <CaminosScreen />
   else if ((seg[1] === 'camino' || seg[1] === 'ruta') && seg[2]) screen = <LineDetail key={path} kind={seg[1]} id={seg[2]} />
   else if (path === '/grabar') screen = <RecordScreen route={route} />

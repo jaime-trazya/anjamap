@@ -104,10 +104,25 @@ export interface MapViewProps {
   onTap?: (p: LatLon) => void
   onMove?: (center: LatLon, zoom: number) => void
   onUserPan?: () => void
+  /** Recorrido que llevas hecho (se pinta en azul) */
+  trail?: LatLon[] | null
+  /** Punto de salida de una ruta planificada */
+  origen?: LatLon | null
+  /** El mapa puede girar (fijo durante la vida del componente) */
+  rotatable?: boolean
+  /** Rumbo que queda hacia arriba; null = norte arriba. Solo con `rotatable`. */
+  bearing?: number | null
 }
+
+/** Al girar, tu posición baja un poco para ver más por delante (fracción del alto) */
+const ROT_SHIFT = 0.18
 
 export function MapView(props: MapViewProps) {
   const el = useRef<HTMLDivElement>(null)
+  const wrap = useRef<HTMLDivElement>(null)
+  /** Margen oculto del lienzo girable a cada lado (px) */
+  const inset = useRef({ x: 0, y: 0, h: 0 })
+  const angle = useRef(0)
   const mapRef = useRef<L.Map | null>(null)
   const layers = useRef<{
     tiles: L.Layer[]
@@ -115,6 +130,7 @@ export function MapView(props: MapViewProps) {
     red: L.LayerGroup
     caminos: L.LayerGroup
     rutas: L.LayerGroup
+    trail: L.LayerGroup
     route: L.LayerGroup
     draft: L.LayerGroup
     bancales: L.LayerGroup
@@ -124,6 +140,25 @@ export function MapView(props: MapViewProps) {
   useEffect(() => {
     cb.current = props
   })
+
+  // Mapa girable: el lienzo es un cuadrado de la diagonal (más el desplazamiento) para que al girar no asomen esquinas
+  const rotatable = props.rotatable === true
+  useEffect(() => {
+    const w = wrap.current
+    const inner = el.current
+    if (!rotatable || !w || !inner) return
+    const size = () => {
+      const W = w.clientWidth
+      const H = w.clientHeight
+      const S = Math.ceil(Math.hypot(W, H) + 2 * ROT_SHIFT * H)
+      inset.current = { x: (S - W) / 2, y: (S - H) / 2, h: H }
+      Object.assign(inner.style, { width: `${S}px`, height: `${S}px`, left: `${(W - S) / 2}px`, top: `${(H - S) / 2}px` })
+    }
+    size()
+    const ro = new ResizeObserver(size)
+    ro.observe(w)
+    return () => ro.disconnect()
+  }, [rotatable])
 
   // Crear el mapa una vez
   useEffect(() => {
@@ -156,6 +191,7 @@ export function MapView(props: MapViewProps) {
       red: L.layerGroup([], { pane: pane('red', 390) }),
       caminos: L.layerGroup([], { pane: pane('caminos', 400) }).addTo(map),
       rutas: L.layerGroup([], { pane: pane('rutas', 410) }).addTo(map),
+      trail: L.layerGroup([], { pane: pane('trail', 415) }).addTo(map),
       route: L.layerGroup([], { pane: pane('route', 420) }).addTo(map),
       draft: L.layerGroup([], { pane: pane('draft', 430) }).addTo(map),
       bancales: L.layerGroup([], { pane: pane('bancales', 600) }).addTo(map),
@@ -171,10 +207,20 @@ export function MapView(props: MapViewProps) {
     const center = map.getCenter()
     cb.current.onMove?.([center.lat, center.lng], map.getZoom())
     mapRef.current = map
+    // Mapa girable: la atribución va fuera del lienzo girado para que siempre se vea derecha
+    let corner: HTMLDivElement | null = null
+    const attr = map.attributionControl.getContainer()
+    if (wrap.current && attr) {
+      corner = document.createElement('div')
+      corner.className = 'leaflet-bottom leaflet-right'
+      corner.appendChild(attr)
+      wrap.current.appendChild(corner)
+    }
     // El contenedor puede cambiar de tamaño (barra de pestañas, hojas)
     const ro = new ResizeObserver(() => map.invalidateSize())
     ro.observe(el.current!)
     return () => {
+      corner?.remove()
       ro.disconnect()
       map.remove()
       mapRef.current = null
@@ -324,8 +370,32 @@ export function MapView(props: MapViewProps) {
     }
   }, [props.draft])
 
+  // Lo que llevas recorrido: azul fino con borde blanco
+  useEffect(() => {
+    const ls = layers.current
+    if (!ls) return
+    ls.trail.clearLayers()
+    const t = props.trail
+    if (!t || t.length < 2) return
+    const line = { pane: 'trail', interactive: false, lineCap: 'round' as const, lineJoin: 'round' as const }
+    L.polyline(t, { ...line, color: '#ffffff', weight: 6, opacity: 0.75 }).addTo(ls.trail)
+    L.polyline(t, { ...line, color: '#2f7cf6', weight: 3.5, opacity: 0.95 }).addTo(ls.trail)
+  }, [props.trail])
+
+  // Giro del mapa: sigue el camino más corto entre ángulos (de 359° a 1° no da la vuelta entera)
+  useEffect(() => {
+    const inner = el.current
+    if (!rotatable || !inner) return
+    const b = props.bearing
+    const target = b === null || b === undefined ? 0 : -b
+    angle.current += ((((target - angle.current) % 360) + 540) % 360) - 180
+    const shift = b === null || b === undefined ? 0 : ROT_SHIFT * inset.current.h
+    inner.style.transform = `translateY(${shift.toFixed(0)}px) rotate(${angle.current.toFixed(1)}deg)`
+  }, [rotatable, props.bearing])
+
   const cocheKey = props.coche ? props.coche.join(',') : ''
   const puntoKey = props.punto ? props.punto.join(',') : ''
+  const origenKey = props.origen ? props.origen.join(',') : ''
   useEffect(() => {
     const ls = layers.current
     const map = mapRef.current
@@ -346,6 +416,9 @@ export function MapView(props: MapViewProps) {
       if (props.punto) {
         L.marker(props.punto, { pane: 'bancales', interactive: false, icon: bancalIcon({ id: 'punto', nombre: 'Destino', color: '#e0531b' } as Bancal, true, true) }).addTo(ls.bancales)
       }
+      if (props.origen) {
+        L.marker(props.origen, { pane: 'bancales', interactive: false, keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: '<span class="origin-pin"></span>' }) }).addTo(ls.bancales)
+      }
     }
     draw()
     map.on('zoomend', draw)
@@ -353,7 +426,7 @@ export function MapView(props: MapViewProps) {
       map.off('zoomend', draw)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.bancales, props.selectedId, cocheKey, puntoKey])
+  }, [props.bancales, props.selectedId, cocheKey, puntoKey, origenKey])
 
   useEffect(() => {
     const ls = layers.current
@@ -383,9 +456,14 @@ export function MapView(props: MapViewProps) {
     const map = mapRef.current
     if (!map || !props.fit?.length) return
     if (props.fit.length === 1) map.setView(props.fit[0], Math.max(map.getZoom(), 17))
-    else map.fitBounds(L.latLngBounds(props.fit), { padding: [40, 40], maxZoom: 18 })
+    else {
+      // En el mapa girable parte del lienzo queda fuera de la pantalla: se suma ese margen
+      const pad = L.point(40 + inset.current.x, 40 + inset.current.y)
+      map.fitBounds(L.latLngBounds(props.fit), { paddingTopLeft: pad, paddingBottomRight: pad, maxZoom: 18 })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.fitKey])
 
+  if (rotatable) return <div ref={wrap} className={`map map-rot ${props.className ?? ''}`}><div ref={el} className="map-rot-inner" /></div>
   return <div ref={el} className={`map ${props.className ?? ''}`} />
 }

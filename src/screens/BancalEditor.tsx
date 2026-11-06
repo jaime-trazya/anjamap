@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocateFixed, MapPin, Satellite } from 'lucide-react'
-import { db, deleteBancal, uid, type Bancal } from '../db/db'
+import { db, deleteBancal, restoreBancal, uid, type Bancal } from '../db/db'
 import { formatCoord, type LatLon } from '../lib/geo'
 import { Notice, Sheet } from '../ui/components'
 import { useData } from '../ui/useData'
@@ -77,7 +77,7 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
     onClose()
     if (!existing) {
       toast.show(`«${b.nombre}» guardado`, { action: { label: 'Ver', run: () => navigate(`/bancal/${b.id}`) } })
-      if (settings.autoDetalle) autoDetalle(b)
+      if (settings.autoDetalle) autoDetalle(b, settings.capa)
     }
   }
 
@@ -91,9 +91,10 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
       danger: true,
     })
     if (!ok) return
-    await deleteBancal(existing.id)
+    const borrado = await deleteBancal(existing.id)
     onClose()
     navigate('/bancales', true)
+    if (borrado) toast.show(`«${existing.nombre}» borrado`, { duration: 8000, action: { label: 'Deshacer', run: () => void restoreBancal(borrado).then(() => toast.show('Recuperado')) } })
   }
 
   return (

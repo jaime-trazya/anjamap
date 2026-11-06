@@ -1,14 +1,14 @@
 import { useState } from 'react'
 import { ChevronRight, FileUp, Footprints, Map as MapIcon, PenLine, Route as RouteIcon, Waypoints } from 'lucide-react'
-import { db, uid, type Bancal, type Camino } from '../db/db'
-import { formatDistance, pathLength, simplify } from '../lib/geo'
+import { importBackup } from '../db/db'
+import { formatDistance, pathLength } from '../lib/geo'
 import { parseGpx, type GpxData } from '../domain/gpx'
+import { gpxABackup } from '../domain/transfer'
 import { useData } from '../ui/useData'
 import { navigate } from '../ui/router'
 import { pickFile } from '../ui/files'
 import { useToast } from '../ui/toast'
 import { Empty, Segmented, Sheet, Switch } from '../ui/components'
-import { COLORES } from '../domain/constants'
 import { useAction } from '../ui/useAction'
 
 const TIPO_LABEL = { pista: 'Pista', senda: 'Senda', atajo: 'Atajo' } as const
@@ -138,36 +138,21 @@ export function CaminosScreen() {
         </section>
       )}
 
-      {gpx && <GpxImport file={gpx.name} data={gpx.data} bancalesCount={bancales.length} onClose={() => setGpx(null)} />}
+      {gpx && <GpxImport file={gpx.name} data={gpx.data} onClose={() => setGpx(null)} />}
     </main>
   )
 }
 
-function GpxImport({ file, data, bancalesCount, onClose }: { file: string; data: GpxData; bancalesCount: number; onClose: () => void }) {
+function GpxImport({ file, data, onClose }: { file: string; data: GpxData; onClose: () => void }) {
   const toast = useToast()
   const { busy, run: execute } = useAction()
   const [conPuntos, setConPuntos] = useState(true)
   const run = async () => {
-    const now = Date.now()
-    const caminos: Camino[] = data.tracks.map((t) => ({ id: uid(), nombre: t.name, tipo: 'senda', puntos: simplify(t.points, 1.5), origen: 'gpx', creado: now }))
-    const bancales: Bancal[] = conPuntos
-      ? data.waypoints.map((w, i) => ({
-          id: uid(),
-          nombre: w.name || `Bancal ${bancalesCount + i + 1}`,
-          nota: w.desc,
-          lat: w.point[0],
-          lon: w.point[1],
-          precision: null,
-          color: COLORES[0].color,
-          creado: now,
-          actualizado: now,
-        }))
-      : []
-    await db.transaction('rw', db.caminos, db.bancales, async () => {
-      await db.caminos.bulkAdd(caminos)
-      await db.bancales.bulkAdd(bancales)
-    })
-    toast.show(`Importados ${caminos.length} caminos${bancales.length ? ` y ${bancales.length} bancales` : ''}`)
+    // Ids sacados del contenido: importar el mismo GPX otra vez no duplica nada
+    const copia = gpxABackup({ tracks: data.tracks, waypoints: conPuntos ? data.waypoints : [] })
+    const { repetidos } = await importBackup(copia, 'fusionar')
+    const nuevos = copia.bancales.length - repetidos
+    toast.show(`Importados ${copia.caminos.length} caminos${nuevos ? ` y ${nuevos} bancales` : ''}${repetidos ? ` · ${repetidos} ya los tenías` : ''}`)
     onClose()
   }
   return (

@@ -15,15 +15,24 @@ export interface Journey {
 }
 
 /** El perfil motor_scooter es una motocicleta: nunca se usa para un patinete. */
-export function routeRequest(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions) {
+/**
+ * `heading` = hacia dónde te mueves (grados). Se manda a Valhalla para que la ruta salga en tu sentido de marcha
+ * y no te proponga dar media vuelta donde no se puede: busca otro camino por delante.
+ */
+export function routeRequest(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions, heading: number | null = null) {
   if (!isLatLon(from) || !isLatLon(to)) throw new Error('Posición o destino no válidos')
+  const origin: Record<string, number> = { lat: from[0], lon: from[1] }
+  if (heading !== null && Number.isFinite(heading)) {
+    origin.heading = Math.round(((heading % 360) + 360) % 360)
+    origin.heading_tolerance = 45
+  }
   const costing = transport === 'coche' ? 'auto' : transport === 'pie' ? 'pedestrian' : 'bicycle'
   const costing_options = costing === 'auto'
     ? { auto: { use_tolls: options.evitarPeajes ? 0 : 0.5, use_highways: options.evitarAutopistas ? 0 : 0.5 } }
     : costing === 'pedestrian'
       ? { pedestrian: { walking_speed: 4.5, use_ferry: 0 } }
       : { bicycle: { bicycle_type: 'hybrid', cycling_speed: transport === 'patinete' ? Math.max(5, Math.min(25, options.velocidadPatinete)) : 18, use_roads: transport === 'patinete' ? 0 : 0.25, use_hills: transport === 'patinete' ? 0 : 0.25, use_ferry: 0 } }
-  return { locations: [{ lat: from[0], lon: from[1] }, { lat: to[0], lon: to[1] }], costing, costing_options, units: 'kilometers', language: 'es-ES' }
+  return { locations: [origin, { lat: to[0], lon: to[1] }], costing, costing_options, units: 'kilometers', language: 'es-ES' }
 }
 
 export function routeEndpoint(server: string): string {
@@ -99,7 +108,7 @@ export function formatDuration(seconds: number): string {
   return mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h${mins % 60 ? ` ${mins % 60} min` : ''}`
 }
 
-export async function fetchJourney(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions, signal?: AbortSignal): Promise<Journey> {
+export async function fetchJourney(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions, signal?: AbortSignal, heading: number | null = null): Promise<Journey> {
   const controller = new AbortController()
   const abort = () => controller.abort()
   if (signal?.aborted) throw new DOMException('Ruta cancelada', 'AbortError')
@@ -107,7 +116,7 @@ export async function fetchJourney(from: LatLon, to: LatLon, transport: Transpor
   let timeout = false
   const timer = setTimeout(() => { timeout = true; controller.abort() }, 20000)
   try {
-    const response = await fetch(routeEndpoint(options.servidorRutas), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'anjamap' }, body: JSON.stringify(routeRequest(from, to, transport, options)), signal: controller.signal })
+    const response = await fetch(routeEndpoint(options.servidorRutas), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'anjamap' }, body: JSON.stringify(routeRequest(from, to, transport, options, heading)), signal: controller.signal })
     if (response.status === 429) throw new Error('El servidor está ocupado. Espera un momento y vuelve a calcular.')
     if (!response.ok) throw new Error('No se ha podido calcular una ruta para ese destino y transporte')
     return parseJourney(await response.json(), to)
@@ -117,4 +126,23 @@ export async function fetchJourney(from: LatLon, to: LatLon, transport: Transpor
     if (error instanceof TypeError) throw new Error('No se puede conectar con el servidor de rutas. Revisa la conexión o cambia el servidor en Ajustes.', { cause: error })
     throw error
   } finally { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
+}
+
+export type Maniobra = 'recto' | 'derecha' | 'ligera-derecha' | 'izquierda' | 'ligera-izquierda' | 'media-vuelta' | 'rotonda' | 'llegada'
+
+/**
+ * Flecha para cada tipo de maniobra de Valhalla (https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/).
+ * 17 (rampa recta) y 22 (seguir recto) van rectas; 12 y 13 son cambios de sentido; 26 y 27, rotondas.
+ */
+export function maniobra(type: number | undefined): Maniobra {
+  switch (type) {
+    case 10: case 11: return 'derecha'
+    case 2: case 9: case 18: case 20: case 23: case 37: return 'ligera-derecha'
+    case 14: case 15: return 'izquierda'
+    case 3: case 16: case 19: case 21: case 24: case 38: return 'ligera-izquierda'
+    case 12: case 13: return 'media-vuelta'
+    case 26: case 27: return 'rotonda'
+    case 4: case 5: case 6: return 'llegada'
+    default: return 'recto'
+  }
 }

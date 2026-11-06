@@ -43,7 +43,7 @@ export function Compartido({ route }: { route: string }) {
     const now = Date.now()
     const id = uid()
     await db.bancales.add({ id, nombre, finca, lat, lon, precision: null, color, creado: now, actualizado: now })
-    if (settings.autoDetalle) autoDetalle({ lat, lon })
+    if (settings.autoDetalle) autoDetalle({ lat, lon }, settings.capa)
     toast.show(`«${nombre}» guardado en tus bancales`)
     navigate(`/bancal/${id}`, true)
   }

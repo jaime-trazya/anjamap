@@ -12,7 +12,7 @@ import { Empty, Segmented, Sheet } from '../ui/components'
 import { TIPOS } from '../domain/constants'
 import { useAction } from '../ui/useAction'
 
-type Modo = 'camino' | 'ruta' | 'bancal' | 'mover'
+type Modo = 'camino' | 'ruta' | 'bancal' | 'mover' | 'acceso' | 'aparcar'
 
 /**
  * Dibujar sobre el mapa con una cruz en el centro: se mueve el mapa y se pulsa «Añadir punto»
@@ -20,7 +20,7 @@ type Modo = 'camino' | 'ruta' | 'bancal' | 'mover'
  */
 export function DrawScreen({ route }: { route: string }) {
   const params = routeParams(route)
-  const modo = (['camino', 'ruta', 'bancal', 'mover'].includes(params.get('tipo') ?? '') ? params.get('tipo') : 'camino') as Modo
+  const modo = (['camino', 'ruta', 'bancal', 'mover', 'acceso', 'aparcar'].includes(params.get('tipo') ?? '') ? params.get('tipo') : 'camino') as Modo
   const bancalId = params.get('bancal')
   const { bancales, caminos, rutas, settings } = useData()
   const { fix } = usePosition()
@@ -29,7 +29,10 @@ export function DrawScreen({ route }: { route: string }) {
   const { busy, run } = useAction()
   const bancal = bancalId ? bancales.find((b) => b.id === bancalId) : undefined
   const [initial] = useState(() => {
-    if (bancal) return { center: [bancal.lat, bancal.lon] as LatLon, zoom: 18 }
+    if (bancal) {
+      const p = modo === 'acceso' ? bancal.acceso : modo === 'aparcar' ? bancal.aparcamiento : undefined
+      return { center: (p ? [p.lat, p.lon] : [bancal.lat, bancal.lon]) as LatLon, zoom: 18 }
+    }
     if (settings.vista) return { center: [settings.vista.lat, settings.vista.lon] as LatLon, zoom: Math.max(settings.vista.zoom, 16) }
     if (fix) return { center: fix.p, zoom: 17 }
     return null
@@ -42,12 +45,12 @@ export function DrawScreen({ route }: { route: string }) {
   const [tipoCamino, setTipoCamino] = useState<TipoCamino>('pista')
   const isLine = modo === 'camino' || modo === 'ruta'
 
-  if ((modo === 'ruta' || modo === 'mover') && !bancal) {
+  if ((modo === 'ruta' || modo === 'mover' || modo === 'acceso' || modo === 'aparcar') && !bancal) {
     return <main className="screen sub"><Empty title="Este bancal ya no existe" action={<button className="btn" onClick={() => navigate('/bancales', true)}>Volver a bancales</button>} /></main>
   }
 
-  const titulo = modo === 'camino' ? 'Dibujar camino' : modo === 'ruta' ? `Ruta a ${bancal?.nombre ?? 'bancal'}` : modo === 'mover' ? `Mover ${bancal?.nombre ?? 'bancal'}` : 'Marcar bancal'
-  const ayuda = isLine ? 'Mueve el mapa y pulsa + en cada curva. También puedes tocar el mapa.' : 'Mueve el mapa hasta que la cruz quede sobre el bancal.'
+  const titulo = modo === 'camino' ? 'Dibujar camino' : modo === 'ruta' ? `Ruta a ${bancal?.nombre ?? 'bancal'}` : modo === 'mover' ? `Mover ${bancal?.nombre ?? 'bancal'}` : modo === 'acceso' ? 'Entrada del sitio' : modo === 'aparcar' ? 'Dónde aparcar' : 'Marcar bancal'
+  const ayuda = isLine ? 'Mueve el mapa y pulsa + en cada curva. También puedes tocar el mapa.' : modo === 'acceso' ? 'Pon la cruz sobre la puerta o el paso por el que se entra. A pie se navegará hasta aquí.' : modo === 'aparcar' ? 'Pon la cruz donde se deja el coche. En coche se navegará hasta aquí y luego seguirás andando.' : 'Mueve el mapa hasta que la cruz quede sobre el bancal.'
 
   const salir = () => back(bancal ? `/bancal/${bancal.id}` : modo === 'bancal' ? '/' : '/caminos')
 
@@ -57,8 +60,14 @@ export function DrawScreen({ route }: { route: string }) {
       editor.openBancal(undefined, { point: center, precision: null })
       navigate('/', true)
     } else if (modo === 'mover' && bancal) {
+      const antes = { lat: bancal.lat, lon: bancal.lon, precision: bancal.precision, actualizado: bancal.actualizado }
       await db.bancales.update(bancal.id, { lat: center[0], lon: center[1], precision: null, actualizado: Date.now() })
-      toast.show('Posición actualizada')
+      toast.show('Posición actualizada', { duration: 8000, action: { label: 'Deshacer', run: () => void db.bancales.update(bancal.id, antes).then(() => toast.show('Posición anterior recuperada')) } })
+      navigate(`/bancal/${bancal.id}`, true)
+    } else if ((modo === 'acceso' || modo === 'aparcar') && bancal) {
+      const campo = modo === 'acceso' ? 'acceso' : 'aparcamiento'
+      await db.bancales.update(bancal.id, { [campo]: { lat: center[0], lon: center[1] }, actualizado: Date.now() })
+      toast.show(modo === 'acceso' ? 'Entrada guardada' : 'Aparcamiento guardado')
       navigate(`/bancal/${bancal.id}`, true)
     }
   }
@@ -139,7 +148,7 @@ export function DrawScreen({ route }: { route: string }) {
               </button>
             )}
             <button className="btn primary block" disabled={!center || busy} onClick={() => void run(confirmarPunto)}>
-              <Check size={18} /> {modo === 'mover' ? 'Mover aquí' : 'Bancal aquí'}
+              <Check size={18} /> {modo === 'mover' ? 'Mover aquí' : modo === 'acceso' ? 'La entrada está aquí' : modo === 'aparcar' ? 'Se aparca aquí' : 'Bancal aquí'}
             </button>
           </div>
         )}

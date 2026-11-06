@@ -1,7 +1,7 @@
 /**
  * Seguimiento de una ruta mientras se anda: hacia dónde apuntar la flecha y cuánto falta.
  */
-import { bearing, closestOnPath, distance, pathLength, pointAlong, type LatLon } from '../lib/geo'
+import { angleDiff, bearing, closestOnPath, distance, pathLength, pointAlong, type LatLon } from '../lib/geo'
 
 /** Si te separas más de esto de la ruta, la flecha te devuelve a ella */
 export const OFF_ROUTE = 35
@@ -27,6 +27,8 @@ export interface NavState {
   snapped: LatLon
   /** Metros entre tu posición y la ruta */
   routeDist: number
+  /** Vas por la ruta pero en sentido contrario (confirmado en varias lecturas) */
+  wrongWay?: boolean
 }
 
 /**
@@ -64,22 +66,35 @@ export class RouteTracker {
   private route: LatLon[] | null = null
   private along = 0
   private offCount = 0
-  update(key: string, route: LatLon[], pos: LatLon, dest: LatLon, acc: number, offRouteBase: number, speed = 0, confirm = 3): NavState {
+  private wrongCount = 0
+  /**
+   * `heading` = rumbo de marcha (null si estás parado). Si vas sobre la ruta pero en sentido contrario durante varias
+   * lecturas (te has pasado un cruce y no puedes dar la vuelta), devuelve `wrongWay` para buscar otro camino.
+   */
+  update(key: string, route: LatLon[], pos: LatLon, dest: LatLon, acc: number, offRouteBase: number, speed = 0, confirm = 3, heading: number | null = null): NavState {
     if (key !== this.key) {
       this.key = key
       this.along = 0
       this.offCount = 0
+      this.wrongCount = 0
     }
     if (route !== this.route) {
       // Ruta recalculada: empieza en tu posición
       if (this.route) this.along = 0
       this.route = route
+      this.wrongCount = 0
     }
     const threshold = Math.max(offRouteBase, acc * 1.5)
     const s = navigate(pos, route, dest, this.along, acc, threshold, Math.max(LOOKAHEAD, speed * 4))
     this.offCount = s.offRoute ? this.offCount + 1 : 0
     if (!s.offRoute) this.along = Math.max(this.along, s.along)
-    return s.offRoute && this.offCount < confirm ? { ...s, offRoute: false } : s
+    if (!s.offRoute && !s.arrived && heading !== null && speed > 1.5) {
+      const a = pointAlong(route, s.along)
+      const b = pointAlong(route, s.along + 20)
+      if (distance(a, b) > 5) this.wrongCount = Math.abs(angleDiff(heading - bearing(a, b))) > 120 ? this.wrongCount + 1 : 0
+    } else if (s.offRoute || speed <= 0.5) this.wrongCount = 0
+    const wrongWay = this.wrongCount > confirm
+    return s.offRoute && this.offCount < confirm ? { ...s, offRoute: false, wrongWay } : { ...s, wrongWay }
   }
 }
 

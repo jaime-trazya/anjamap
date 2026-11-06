@@ -34,7 +34,7 @@ export function TransferSheet({ ids, onClose }: { ids?: string[]; onClose: () =>
   return <Sheet title={restore ? 'Importar bancales' : 'Importar y compartir'} onClose={onClose}>
     {restore ? <>
       <section className="card stack"><strong>{restore.bancales.length} bancales · {restore.fotos?.length ?? 0} fotos</strong><p className="meta">{restore.caminos.length} caminos · {restore.rutas.length} rutas. Los identificadores coincidentes se actualizarán; el resto se añadirá.</p></section>
-      <button className="btn primary block big" disabled={busy} onClick={() => void run(async () => { await importBackup(restore, 'fusionar'); toast.show('Datos importados, incluidas las fotos'); onClose() })}>Añadir a mis bancales</button>
+      <button className="btn primary block big" disabled={busy} onClick={() => void run(async () => { const { repetidos } = await importBackup(restore, 'fusionar'); toast.show(repetidos ? `Datos importados · ${repetidos} sitios ya los tenías y no se han duplicado` : 'Datos importados, incluidas las fotos'); onClose() })}>Añadir a mis bancales</button>
       <button className="btn block" disabled={busy} onClick={() => setRestore(null)}>Elegir otro archivo</button>
       <button className="btn danger block" disabled={busy} onClick={() => void run(async () => {
         if (!(await toast.confirm({ title: '¿Reemplazar todos tus datos?', message: 'Se borrarán tus bancales, fotos, caminos y rutas actuales. Guarda primero una copia si quieres conservarlos.', confirmLabel: 'Reemplazar todo', danger: true }))) return

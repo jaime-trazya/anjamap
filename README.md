@@ -30,13 +30,29 @@ Al calcular una ruta, el servidor recibe el origen, destino y preferencias. Las 
 
 - **Filtro de posición** ([src/domain/track.ts](src/domain/track.ts)): suaviza cada lectura según su precisión y descarta saltos imposibles para el transporte elegido (4 m/s a pie, 12 en patinete, 15 en bici y 45 en coche). La velocidad y el rumbo salen del movimiento real.
 - **Ajuste a la ruta**: si la separación cabe en el error del GPS, tu posición se pega a la ruta.
-- **Desvíos**: solo cuentan tras tres lecturas seguidas fuera de la ruta. El umbral depende del transporte y de la precisión. Con un desvío confirmado, la ruta se recalcula a los 8 s, en vez de esperar 20.
+- **Desvíos**: solo cuentan tras tres lecturas seguidas fuera de la ruta. El umbral depende del transporte y de la precisión. Con un desvío confirmado, la ruta se recalcula a los 4 s.
 - **Indicaciones**: siempre la siguiente y, si está cerca, también la de después («Luego: …»). La red local sin conexión también da indicaciones en los cruces.
 - **Mapa**:
   - Lo recorrido se pinta en gris y lo que falta en naranja, con borde y flechas de sentido.
   - Tu posición es una flecha de navegación.
   - En coche, bici o patinete se ve la velocidad, y el zoom se ajusta a ella.
 - **Brújula**: solo en el modo «Línea recta». Con ruta se sigue el mapa.
+- **Mapa girado**: al seguir tu posición, lo que tienes delante queda arriba (con el rumbo del movimiento). Se desactiva en Ajustes o con el botón de la flecha; si mueves el mapa con el dedo vuelve al norte.
+- **Avisos por voz** (activados por defecto): cada giro se anuncia con antelación («En 300 metros, gire a la derecha») y al llegar a él; también al calcular o cambiar la ruta, al salirte, al ir en sentido contrario y al llegar. En iPhone la voz empieza tras el primer toque en la pantalla (limitación de Safari).
+- **Recalcular hacia delante**: al desviarte o ir en sentido contrario, la nueva ruta se pide con tu rumbo de marcha, así sale por delante en vez de mandarte dar la vuelta. Se recalcula a los pocos segundos de confirmarse el desvío.
+- **Recorrido hecho**: se pinta en azul y se puede guardar. A pie hasta un sitio, como ruta propia del sitio; en otro caso, en Caminos.
+- **Entrada y aparcamiento**: cada sitio puede tener su entrada exacta (a pie se navega hasta ella) y su aparcamiento (en coche se va allí y luego se sigue andando). Al llegar se ve la foto del sitio.
+
+### Planificar una ruta
+
+Desde el mapa (botón de ruta), desde la ficha de un sitio o manteniendo pulsado un punto: elige la salida (tu posición, el coche, un sitio, un punto del mapa o unas coordenadas) y el destino. Se ve el tiempo, la distancia y las indicaciones, se pueden comparar los cuatro transportes y guardar la ruta y el mapa de la zona para cuando no haya cobertura. A pie y sin conexión se planifica con los caminos guardados en el móvil.
+
+### Otras ayudas
+
+- **Favoritos** a un toque desde el mapa y **recientes** al buscar.
+- **Coordenadas**: se pueden pegar en el buscador (decimales, grados-minutos-segundos o un enlace de Google Maps).
+- **Deshacer** al borrar o mover un sitio.
+- **Importar sin duplicar**: el mismo GPX dos veces no repite sitios ni caminos, y un sitio igual (mismo nombre a menos de 5 m) se conserva sin duplicar.
 
 La ruta se calcula con conexión. Si se pierde cobertura durante la sesión, se conserva el trazado; los desvíos requieren conexión para recalcularse. La orientación local y los recorridos propios a pie funcionan sin conexión, pero pueden atravesar campo y no verifican restricciones de paso. La red local cubre la Canal de Navarrés y La Costera. El satélite se descarga desde Ajustes.
 

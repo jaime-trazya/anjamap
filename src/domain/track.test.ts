@@ -58,3 +58,43 @@ describe('seguimiento de la ruta', () => {
     expect(pathLength(ahead)).toBeCloseTo(150, -1)
   })
 })
+
+describe('recorrido hecho', () => {
+  it('apunta solo lecturas buenas y separadas', async () => {
+    const { TrailRecorder } = await import('./track')
+    const r = new TrailRecorder(0)
+    const fix = (x: number, t: number, acc = 5, rejected = false) => ({ p: m(x, 0), acc, t, rejected })
+    r.push(fix(0, 1000))
+    const igual = r.push(fix(1, 2000))
+    expect(igual).toHaveLength(1)
+    r.push(fix(10, 3000))
+    r.push(fix(50, 4000, 80))
+    r.push(fix(60, 5000, 5, true))
+    expect(r.push(fix(20, 6000))).toHaveLength(3)
+  })
+})
+
+describe('tramos de una grabación', () => {
+  it('no une el hueco de una pausa', async () => {
+    const { tramos } = await import('./track')
+    const pts = [m(0, 0), m(10, 0), m(20, 0), m(200, 0), m(210, 0)]
+    expect(tramos(pts, [3])).toEqual([pts.slice(0, 3), pts.slice(3)])
+    expect(tramos(pts, [1])).toEqual([pts.slice(1)])
+    expect(tramos(pts)).toEqual([pts])
+  })
+})
+
+describe('sentido contrario', () => {
+  it('lo detecta tras varias lecturas yendo al revés por la ruta', () => {
+    const route = [m(0, 0), m(500, 0)]
+    const t = new RouteTracker()
+    // La ruta va hacia el este (90°); vas hacia el oeste (270°) a 10 m/s
+    let s = t.update('w', route, m(300, 0), m(500, 0), 5, 25, 10, 3, 270)
+    for (let x = 290; x > 240; x -= 10) s = t.update('w', route, m(x, 0), m(500, 0), 5, 25, 10, 3, 270)
+    expect(s.wrongWay).toBe(true)
+    const ok = new RouteTracker()
+    let a = ok.update('w', route, m(100, 0), m(500, 0), 5, 25, 10, 3, 90)
+    for (let x = 110; x < 170; x += 10) a = ok.update('w', route, m(x, 0), m(500, 0), 5, 25, 10, 3, 90)
+    expect(a.wrongWay).toBe(false)
+  })
+})

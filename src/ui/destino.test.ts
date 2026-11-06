@@ -17,3 +17,17 @@ describe('destinos de navegación', () => {
     expect(resolverModo('directa', rutas, 'b1')).toBe('directa')
   })
 })
+
+describe('coordenadas escritas o pegadas', () => {
+  it('lee los formatos habituales', async () => {
+    const { leerCoordenadas } = await import('./destino')
+    expect(leerCoordenadas('39.1234, -0.6789')).toEqual([39.1234, -0.6789])
+    expect(leerCoordenadas('39,1234 -0,6789')).toEqual([39.1234, -0.6789])
+    expect(leerCoordenadas('https://www.google.com/maps/@39.1234,-0.6789,17z')).toEqual([39.1234, -0.6789])
+    const dms = leerCoordenadas(`39°05'12.0"N 0°41'24.0"W`)!
+    expect(dms[0]).toBeCloseTo(39.08667, 4)
+    expect(dms[1]).toBeCloseTo(-0.69, 4)
+    expect(leerCoordenadas('Huerto de la caseta')).toBeNull()
+    expect(leerCoordenadas('120, 10')).toBeNull()
+  })
+})
