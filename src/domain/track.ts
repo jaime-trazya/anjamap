@@ -86,16 +86,28 @@ export class PositionFilter {
  */
 export class TrailRecorder {
   points: LatLon[] = []
+  /** Índice donde empieza lo grabado con el transporte actual (p. ej. al dejar el coche y seguir andando) */
+  inicioTramo = 0
+  private modo: string | undefined
   private lastT = -1
   constructor(private desde: number, private maxAcc = 25) {}
 
-  push(f: Pick<TrackFix, 'p' | 'acc' | 't' | 'rejected'>): LatLon[] {
+  push(f: Pick<TrackFix, 'p' | 'acc' | 't' | 'rejected'>, modo?: string): LatLon[] {
+    if (modo !== undefined && modo !== this.modo) {
+      if (this.modo !== undefined) this.inicioTramo = this.points.length
+      this.modo = modo
+    }
     if (f.t === this.lastT || f.rejected || f.acc > this.maxAcc || f.t < this.desde - 1000) return this.points
     this.lastT = f.t
     const last = this.points[this.points.length - 1]
     if (last && distance(last, f.p) < Math.max(4, f.acc / 3)) return this.points
     this.points = [...this.points, f.p]
     return this.points
+  }
+
+  /** Lo grabado con el transporte actual */
+  get tramoActual(): LatLon[] {
+    return this.points.slice(this.inicioTramo)
   }
 }
 

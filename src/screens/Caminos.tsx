@@ -150,7 +150,7 @@ function GpxImport({ file, data, onClose }: { file: string; data: GpxData; onClo
   const run = async () => {
     // Ids sacados del contenido: importar el mismo GPX otra vez no duplica nada
     const copia = gpxABackup({ tracks: data.tracks, waypoints: conPuntos ? data.waypoints : [] })
-    const { repetidos } = await importBackup(copia, 'fusionar')
+    const { repetidos } = await importBackup(copia, 'fusionar', undefined, { externo: true })
     const nuevos = copia.bancales.length - repetidos
     toast.show(`Importados ${copia.caminos.length} caminos${nuevos ? ` y ${nuevos} bancales` : ''}${repetidos ? ` · ${repetidos} ya los tenías` : ''}`)
     onClose()

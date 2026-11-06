@@ -10,8 +10,8 @@ const bancal = (id: string, nombre: string, lat = 39.1): Bancal => ({ id, nombre
 describe('importar sin duplicar', () => {
   it('el mismo GPX dos veces deja un solo sitio y un solo camino', async () => {
     const d = fresh()
-    await importBackup(gpxABackup(gpx), 'fusionar', d)
-    const second = await importBackup(gpxABackup(gpx), 'fusionar', d)
+    await importBackup(gpxABackup(gpx), 'fusionar', d, { externo: true })
+    const second = await importBackup(gpxABackup(gpx), 'fusionar', d, { externo: true })
     expect(await d.bancales.count()).toBe(1)
     expect(await d.caminos.count()).toBe(1)
     expect(second.repetidos).toBe(1)
@@ -19,10 +19,10 @@ describe('importar sin duplicar', () => {
 
   it('no pisa los cambios hechos a un sitio que vino de un GPX', async () => {
     const d = fresh()
-    await importBackup(gpxABackup(gpx), 'fusionar', d)
+    await importBackup(gpxABackup(gpx), 'fusionar', d, { externo: true })
     const [b] = await d.bancales.toArray()
     await d.bancales.update(b.id, { favorito: true })
-    await importBackup(gpxABackup(gpx), 'fusionar', d)
+    await importBackup(gpxABackup(gpx), 'fusionar', d, { externo: true })
     expect((await d.bancales.get(b.id))?.favorito).toBe(true)
   })
 
@@ -33,6 +33,27 @@ describe('importar sin duplicar', () => {
     expect(r.repetidos).toBe(1)
     expect((await d.bancales.toArray()).map((b) => b.id).sort()).toEqual(['lejos', 'mio'])
     expect((await d.rutas.get('r1'))?.bancalId).toBe('mio')
+  })
+})
+
+describe('importar GPX y JSON', () => {
+  it('dos caminos con mismo nombre y extremos pero distinto trazado no se confunden', async () => {
+    const d = fresh()
+    const a: [number, number][] = [[39.1, -0.69], [39.1005, -0.689], [39.101, -0.69]]
+    const b: [number, number][] = [[39.1, -0.69], [39.1005, -0.691], [39.101, -0.69]]
+    await importBackup(gpxABackup({ waypoints: [], tracks: [{ name: 'Senda', points: a }, { name: 'Senda', points: b }] }), 'fusionar', d, { externo: true })
+    expect(await d.caminos.count()).toBe(2)
+  })
+
+  it('una copia JSON sí actualiza un sitio que vino de un GPX', async () => {
+    const d = fresh()
+    const copia = gpxABackup(gpx)
+    await importBackup(copia, 'fusionar', d, { externo: true })
+    const actualizado = { ...copia, bancales: copia.bancales.map((x) => ({ ...x, nota: 'Puerta verde', favorito: true })) }
+    await importBackup(actualizado, 'fusionar', d)
+    const [b] = await d.bancales.toArray()
+    expect(b.nota).toBe('Puerta verde')
+    expect(b.favorito).toBe(true)
   })
 })
 

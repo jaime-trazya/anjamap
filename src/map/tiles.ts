@@ -215,7 +215,8 @@ export async function descargar(id: string, nombre: string, tiles: Tile[], capa:
     const cache = await caches.open(CACHE)
     // Esperar a todos los workers incluso si uno falla: no dejar tareas de una descarga anterior vivas.
     const results = await Promise.allSettled(Array.from({ length: Math.max(1, Math.floor(concurrencia)) }, () => worker(cache)))
-    download.estado = results.some((r) => r.status === 'rejected') ? 'error' : cancelar ? 'cancelada' : 'terminada'
+    // Si no se ha guardado ninguna imagen (sin conexión, servidor caído…) no se da por terminada
+    download.estado = results.some((r) => r.status === 'rejected') || (download.total > 0 && download.hechas === 0) ? 'error' : cancelar ? 'cancelada' : 'terminada'
   } catch {
     download.estado = 'error'
   }

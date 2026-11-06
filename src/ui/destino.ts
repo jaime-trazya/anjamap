@@ -75,11 +75,16 @@ export function leerCoordenadas(texto: string): LatLon | null {
   if (!s) return null
   const dms = [...s.matchAll(/(\d{1,3})\s*[°º]\s*(\d{1,2})\s*['′]\s*(\d{1,2}(?:[.,]\d+)?)\s*(?:["″]|'')?\s*([NSEWO])/gi)]
   if (dms.length === 2) {
+    // Minutos y segundos tienen que ser menores de 60: «39°99′» es un error, no 40,65°
     const val = (m: RegExpMatchArray) => {
-      const v = Number(m[1]) + Number(m[2]) / 60 + Number(m[3].replace(',', '.')) / 3600
+      const min = Number(m[2]), seg = Number(m[3].replace(',', '.'))
+      if (min >= 60 || seg >= 60) return NaN
+      const v = Number(m[1]) + min / 60 + seg / 3600
       return /[SWO]/i.test(m[4]) ? -v : v
     }
     const [a, b] = dms
+    // Una latitud (N/S) y una longitud (E/W/O)
+    if (/[NS]/i.test(a[4]) === /[NS]/i.test(b[4])) return null
     const p: LatLon = /[NS]/i.test(a[4]) ? [val(a), val(b)] : [val(b), val(a)]
     return isLatLon(p) ? p : null
   }

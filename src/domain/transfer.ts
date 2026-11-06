@@ -17,10 +17,13 @@ function hash(s: string): string {
 const pt = (p: LatLon) => `${p[0].toFixed(6)},${p[1].toFixed(6)}`
 
 /**
- * Convierte un GPX en una copia de Anjamap. Los ids salen del contenido (nombre y coordenadas),
+ * Convierte un GPX en una copia de Anjamap. Los ids salen del contenido (nombre y todas las coordenadas),
  * así importar el mismo archivo dos veces actualiza lo que ya había en vez de duplicarlo.
  */
 export function gpxABackup(data: GpxData, now = Date.now()): Backup {
+  // Un mismo punto o recorrido repetido dentro del archivo da el mismo id: se queda uno
+  const vistos = new Set<string>()
+  const unico = <T extends { id: string }>(x: T) => !vistos.has(x.id) && !!vistos.add(x.id)
   return validateBackup({
     app: 'anjamap',
     version: 3,
@@ -28,15 +31,18 @@ export function gpxABackup(data: GpxData, now = Date.now()): Backup {
     bancales: data.waypoints.map((w, i) => {
       const nombre = w.name?.trim() || `Punto ${i + 1}`
       return { id: `gpx-b-${hash(`${nombre}|${pt(w.point)}`)}`, nombre, nota: w.desc, lat: w.point[0], lon: w.point[1], precision: null, color: COLORES[0].color, creado: now, actualizado: now }
-    }),
+    }).filter(unico),
     caminos: data.tracks.map((t, i) => {
       const nombre = t.name?.trim() || `Camino ${i + 1}`
-      return { id: `gpx-c-${hash(`${nombre}|${t.points.length}|${pt(t.points[0])}|${pt(t.points[t.points.length - 1])}`)}`, nombre, puntos: simplify(t.points, 1.5), tipo: 'senda', origen: 'gpx', creado: now }
-    }),
+      return { id: `gpx-c-${hash(`${nombre}|${t.points.map(pt).join(';')}`)}`, nombre, puntos: simplify(t.points, 1.5), tipo: 'senda', origen: 'gpx', creado: now }
+    }).filter(unico),
     rutas: [],
     fotos: [],
   })
 }
+
+/** GPX o CSV de otra app: sus ids salen del contenido y reimportarlos no debe pisar lo editado */
+export const esArchivoExterno = (content: string, filename: string) => /\.(csv|tsv|txt|gpx)$/i.test(filename) || content.trimStart().startsWith('<')
 
 export function readTransfer(content: string, filename: string): Backup {
   if (/\.(csv|tsv|txt)$/i.test(filename)) return csvABackup(content).backup

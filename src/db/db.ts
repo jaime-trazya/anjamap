@@ -290,7 +290,7 @@ const mismoNombre = (a: string, b: string) => a.trim().toLocaleLowerCase('es') =
  * (y sus rutas y fotos nuevas se le asignan). Lo que viene de un GPX y ya estaba importado no pisa tus cambios.
  * Devuelve cuántos sitios repetidos se han saltado.
  */
-export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', database = db): Promise<{ repetidos: number }> {
+export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', database = db, opts: { externo?: boolean } = {}): Promise<{ repetidos: number }> {
   b = validateBackup(b)
   return database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario, database.fotos, database.marcas], async () => {
     if (modo === 'reemplazar') await Promise.all([database.bancales.clear(), database.caminos.clear(), database.rutas.clear(), database.diario.clear(), database.fotos.clear(), database.marcas.clear()])
@@ -300,13 +300,14 @@ export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', d
       const existentes = await database.bancales.toArray()
       const ids = new Set(existentes.map((e) => e.id))
       bancales = bancales.filter((x) => {
-        if (/^(gpx|csv)-/.test(x.id) && ids.has(x.id)) return false
+        // Volver a importar el mismo GPX/CSV no pisa lo que ya editaste; una copia JSON sí actualiza (notas, entrada, favorito…)
+        if (opts.externo && /^(gpx|csv)-/.test(x.id) && ids.has(x.id)) return false
         const dup = existentes.find((e) => e.id !== x.id && mismoNombre(e.nombre, x.nombre) && distance([e.lat, e.lon], [x.lat, x.lon]) < 5)
         if (dup) remap.set(x.id, dup.id)
         return !dup
       })
       const caminoIds = new Set((await database.caminos.toArray()).map((c) => c.id))
-      caminos = caminos.filter((c) => !(c.id.startsWith('gpx-') && caminoIds.has(c.id)))
+      if (opts.externo) caminos = caminos.filter((c) => !(c.id.startsWith('gpx-') && caminoIds.has(c.id)))
     }
     const fix = <T extends { bancalId: string }>(rows: T[]) => rows.map((r) => (remap.has(r.bancalId) ? { ...r, bancalId: remap.get(r.bancalId)! } : r))
     await database.bancales.bulkPut(bancales)

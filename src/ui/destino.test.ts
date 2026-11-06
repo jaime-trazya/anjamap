@@ -23,6 +23,9 @@ describe('coordenadas escritas o pegadas', () => {
     const { leerCoordenadas } = await import('./destino')
     expect(leerCoordenadas('39.1234, -0.6789')).toEqual([39.1234, -0.6789])
     expect(leerCoordenadas('39,1234 -0,6789')).toEqual([39.1234, -0.6789])
+    expect(leerCoordenadas("39°99'00\"N 0°41'10\"W")).toBeNull()
+    expect(leerCoordenadas("39°05'75\"N 0°41'10\"W")).toBeNull()
+    expect(leerCoordenadas("39°05'12\"N 0°41'10\"N")).toBeNull()
     expect(leerCoordenadas('https://www.google.com/maps/@39.1234,-0.6789,17z')).toEqual([39.1234, -0.6789])
     const dms = leerCoordenadas(`39°05'12.0"N 0°41'24.0"W`)!
     expect(dms[0]).toBeCloseTo(39.08667, 4)

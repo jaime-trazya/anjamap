@@ -10,8 +10,8 @@ import { useGraph } from '../ui/graph'
 import { usePosition } from '../ui/position'
 import { back, navigate, routeParams } from '../ui/router'
 import { useToast } from '../ui/toast'
-import { codigoLugar, leerCoordenadas, resolverLugar, rutaNavegacion, type Lugar } from '../ui/destino'
-import { descargarRuta } from '../ui/offline'
+import { codigoLugar, leerCoordenadas, puntoDeLlegada, resolverLugar, rutaNavegacion, type Lugar } from '../ui/destino'
+import { descargarRuta, resultadoDescarga } from '../ui/offline'
 import { Sheet } from '../ui/components'
 import { MicButton } from '../ui/MicButton'
 import { TransportPicker } from '../ui/TransportPicker'
@@ -112,10 +112,10 @@ export function PlanScreen({ route }: { route: string }) {
   const toKey = hasta?.p ? (hasta.codigo === 'yo' ? 'yo' : ptKey(hasta.p)) : ''
   const viaKey = paradas.map((l) => ptKey(l.p!)).join(';')
   const cerradosKey = cerrados.map(ptKey).join(';')
-  const ends = useRef<{ from: LatLon | null; to: LatLon | null; via: LatLon[] }>({ from: null, to: null, via: [] })
+  const ends = useRef<{ from: LatLon | null; to: LatLon | null; via: LatLon[]; lugares: (Lugar | null)[] }>({ from: null, to: null, via: [], lugares: [] })
   const cerradosRef = useRef(cerrados)
   useEffect(() => {
-    ends.current = { from: desde?.p ?? null, to: hasta?.p ?? null, via: paradas.map((l) => l.p!) }
+    ends.current = { from: desde?.p ?? null, to: hasta?.p ?? null, via: paradas.map((l) => l.p!), lugares: [desde, ...paradas, hasta] }
     cerradosRef.current = cerrados
   })
   const { servidorRutas, evitarPeajes, evitarAutopistas, velocidadPatinete } = settings
@@ -162,9 +162,11 @@ export function PlanScreen({ route }: { route: string }) {
   // Comparar transportes: tiempo y distancia de cada uno (consultas en fila para no saturar el servidor)
   const [cmp, setCmp] = useState<{ key: string; items: Partial<Record<Transporte, { seconds: number; length: number } | 'error'>> } | null>(null)
   const comparar = async () => {
-    const { from, to, via } = ends.current
+    const { from, to, via, lugares } = ends.current
     if (!from || !to || !key) return
     const k = placesKey
+    // Cada transporte va a su punto de llegada: en coche al aparcamiento del sitio, a pie a su entrada
+    const llegada = (l: Lugar | null, t: Transporte, p: LatLon) => (l?.bancal ? puntoDeLlegada(l.bancal, t).p : p)
     const options = { servidorRutas, evitarPeajes, evitarAutopistas, velocidadPatinete }
     let items: Partial<Record<Transporte, { seconds: number; length: number } | 'error'>> = {}
     setCmp({ key: k, items })
@@ -172,7 +174,9 @@ export function PlanScreen({ route }: { route: string }) {
       if (t === transport && plans[0]?.fuente === 'calles') items = { ...items, [t]: { seconds: plans[0].seconds, length: plans[0].length } }
       else {
         try {
-          const j = await fetchJourney(from, to, t, options, undefined, null, { via, evitar: cerradosRef.current })
+          const [ld, ...resto] = lugares
+          const lh = resto.pop() ?? null
+          const j = await fetchJourney(llegada(ld, t, from), llegada(lh, t, to), t, options, undefined, null, { via: via.map((p, i) => llegada(resto[i] ?? null, t, p)), evitar: cerradosRef.current })
           items = { ...items, [t]: { seconds: j.seconds, length: j.length } }
         } catch {
           items = { ...items, [t]: 'error' }
@@ -199,7 +203,7 @@ export function PlanScreen({ route }: { route: string }) {
     if (!plan) return
     toast.show('Descargando el mapa de la ruta…')
     const r = await descargarRuta(plan.points, `Ruta a ${hasta?.nombre ?? 'destino'}`, settings.capa)
-    toast.show(r.estado === 'terminada' ? 'Mapa de la ruta guardado para usarlo sin cobertura' : 'No se ha podido terminar la descarga')
+    toast.show(resultadoDescarga(r, 'Mapa de la ruta guardado para usarlo sin cobertura'), { duration: 6000 })
   }
 
   // Encuadre: la ruta cuando está calculada; si no, los lugares elegidos

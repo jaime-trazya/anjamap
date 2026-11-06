@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { Download, FileDown, Share2, Upload } from 'lucide-react'
 import { db, exportBackup, importBackup, type Backup } from '../db/db'
-import { MAX_TRANSFER_BYTES, readTransfer, transferGpx } from '../domain/transfer'
+import { MAX_TRANSFER_BYTES, esArchivoExterno, readTransfer, transferGpx } from '../domain/transfer'
 import { saveFile, shareFile, today } from './files'
 import { useData } from './useData'
 import { useAction } from './useAction'
@@ -14,6 +14,7 @@ export function TransferSheet({ ids, onClose }: { ids?: string[]; onClose: () =>
   const toast = useToast()
   const input = useRef<HTMLInputElement>(null)
   const [restore, setRestore] = useState<Backup | null>(null)
+  const [externo, setExterno] = useState(false)
   const total = ids?.length ?? bancales.length
   const exportData = async (share: boolean, gpx = false) => {
     const data = await exportBackup(db, ids)
@@ -28,13 +29,15 @@ export function TransferSheet({ ids, onClose }: { ids?: string[]; onClose: () =>
     if (!file) return
     void run(async () => {
       if (file.size > MAX_TRANSFER_BYTES) throw new Error('El archivo supera los 100 MB. Pide que te envíen los bancales en varios archivos.')
-      setRestore(readTransfer(await file.text(), file.name))
+      const texto = await file.text()
+      setRestore(readTransfer(texto, file.name))
+      setExterno(esArchivoExterno(texto, file.name))
     })
   }
   return <Sheet title={restore ? 'Importar bancales' : 'Importar y compartir'} onClose={onClose}>
     {restore ? <>
       <section className="card stack"><strong>{restore.bancales.length} bancales · {restore.fotos?.length ?? 0} fotos</strong><p className="meta">{restore.caminos.length} caminos · {restore.rutas.length} rutas. Los identificadores coincidentes se actualizarán; el resto se añadirá.</p></section>
-      <button className="btn primary block big" disabled={busy} onClick={() => void run(async () => { const { repetidos } = await importBackup(restore, 'fusionar'); toast.show(repetidos ? `Datos importados · ${repetidos} sitios ya los tenías y no se han duplicado` : 'Datos importados, incluidas las fotos'); onClose() })}>Añadir a mis bancales</button>
+      <button className="btn primary block big" disabled={busy} onClick={() => void run(async () => { const { repetidos } = await importBackup(restore, 'fusionar', undefined, { externo }); toast.show(repetidos ? `Datos importados · ${repetidos} sitios ya los tenías y no se han duplicado` : 'Datos importados, incluidas las fotos'); onClose() })}>Añadir a mis bancales</button>
       <button className="btn block" disabled={busy} onClick={() => setRestore(null)}>Elegir otro archivo</button>
       <button className="btn danger block" disabled={busy} onClick={() => void run(async () => {
         if (!(await toast.confirm({ title: '¿Reemplazar todos tus datos?', message: 'Se borrarán tus bancales, fotos, caminos y rutas actuales. Guarda primero una copia si quieres conservarlos.', confirmLabel: 'Reemplazar todo', danger: true }))) return

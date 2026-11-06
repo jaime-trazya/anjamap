@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { distance, fromXY, splitRoute, pathLength, type LatLon } from '../lib/geo'
-import { MAX_SPEED, PositionFilter } from './track'
+import { MAX_SPEED, PositionFilter, TrailRecorder } from './track'
 import { RouteTracker } from './nav'
 
 const REF: LatLon = [39.1, -0.69]
@@ -96,5 +96,19 @@ describe('sentido contrario', () => {
     let a = ok.update('w', route, m(100, 0), m(500, 0), 5, 25, 10, 3, 90)
     for (let x = 110; x < 170; x += 10) a = ok.update('w', route, m(x, 0), m(500, 0), 5, 25, 10, 3, 90)
     expect(a.wrongWay).toBe(false)
+  })
+})
+
+describe('recorrido por transportes', () => {
+  it('al pasar de coche a pie empieza un tramo nuevo', () => {
+    const r = new TrailRecorder(0, 25)
+    const f = (i: number) => ({ p: [39.1 + i * 0.001, -0.69] as [number, number], acc: 5, t: i * 1000, rejected: false })
+    r.push(f(0), 'coche')
+    r.push(f(1), 'coche')
+    r.push(f(2), 'pie')
+    r.push(f(3), 'pie')
+    expect(r.points).toHaveLength(4)
+    expect(r.tramoActual).toHaveLength(2)
+    expect(r.inicioTramo).toBe(2)
   })
 })

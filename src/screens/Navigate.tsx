@@ -10,7 +10,7 @@ import { formatDuration, maniobra, remainingSeconds, TRANSPORT_LABELS, type Mani
 import { addCamino, addRuta, db, setSetting, type Transporte } from '../db/db'
 import { callar, conDistancia, desbloquearVoz, hablar } from '../ui/voz'
 import { useToast } from '../ui/toast'
-import { descargarRuta } from '../ui/offline'
+import { descargarRuta, resultadoDescarga } from '../ui/offline'
 import { useData } from '../ui/useData'
 import { useGraph } from '../ui/graph'
 import { usePosition } from '../ui/position'
@@ -196,7 +196,8 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
   // Recorrido hecho: se apunta mientras navegas y se puede guardar como ruta del sitio o como camino
   const [openedAt] = useState(() => Date.now())
   const [recorder] = useState(() => new TrailRecorder(openedAt, TRAIL_ACC))
-  const trail = useMemo(() => (fix ? recorder.push(fix) : recorder.points), [recorder, fix])
+  // Se apunta con qué transporte se graba: al dejar el coche y seguir andando empieza un tramo nuevo
+  const { trail, inicioTramo } = useMemo(() => ({ trail: fix ? recorder.push(fix, transport) : recorder.points, inicioTramo: recorder.inicioTramo }), [recorder, fix, transport])
   const [trailSaved, setTrailSaved] = useState(0)
   // Lo ya guardado se actualiza al volver a guardar, en vez de crear otra ruta o camino
   const [guardado, setGuardado] = useState<{ tabla: 'rutas' | 'caminos'; id: string } | null>(null)
@@ -223,8 +224,9 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
   const salir = () => back(d.bancal ? `/bancal/${id}` : '/')
   const fechaCorta = () => new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
   const guardarRecorrido = async () => {
-    const puntos = simplify(trail, 2)
-    if (puntos.length < 2) return
+    // La ruta a pie del sitio solo lleva lo andado (no el tramo en coche hasta el aparcamiento)
+    const puntos = simplify(comoRuta ? trail.slice(inicioTramo) : trail, 2)
+    if (puntos.length < 2) return toast.show('Aún no has andado lo suficiente para guardar la ruta a pie')
     const tabla = comoRuta ? 'rutas' : 'caminos'
     if (guardado?.tabla === tabla && (await db[tabla].update(guardado.id, { puntos }))) {
       setTrailSaved(trail.length)
@@ -233,7 +235,7 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
     }
     const nuevo = comoRuta
       ? await addRuta({ nombre: `Recorrido ${transportLabel.toLowerCase()} · ${fechaCorta()}`, bancalId: d.bancal!.id, puntos, origen: 'grabado' })
-      : await addCamino({ nombre: `Hacia ${d.nombre} · ${fechaCorta()}`, tipo: transport === 'pie' ? 'senda' : 'pista', puntos, origen: 'grabado' })
+      : await addCamino({ nombre: `Hacia ${d.nombre} · ${fechaCorta()}`, tipo: transport === 'pie' && inicioTramo === 0 ? 'senda' : 'pista', puntos, origen: 'grabado' })
     setGuardado({ tabla, id: nuevo })
     setTrailSaved(trail.length)
     toast.show(comoRuta ? 'Recorrido guardado en las rutas del sitio' : 'Recorrido guardado en Caminos')
@@ -242,10 +244,21 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
   const prepararSinCobertura = async () => {
     if (!points) return
     setOptionsOpen(false)
-    if (comoRuta && !local) await addRuta({ nombre: `Ruta ${transportLabel.toLowerCase()} · ${fechaCorta()}`, bancalId: d.bancal!.id, puntos: simplify(points, 2), origen: 'dibujado' })
+    // A pie hasta un sitio: ruta propia del sitio (se sigue sin conexión). En coche, bici o patinete: en Caminos, visible en el mapa
+    let guardada = ''
+    if (!local) {
+      const puntos = simplify(points, 2)
+      if (comoRuta) {
+        await addRuta({ nombre: `Ruta ${transportLabel.toLowerCase()} · ${fechaCorta()}`, bancalId: d.bancal!.id, puntos, origen: 'dibujado' })
+        guardada = ' y ruta añadida al sitio'
+      } else {
+        await addCamino({ nombre: `Ruta ${transportLabel.toLowerCase()} a ${d.nombre} · ${fechaCorta()}`, tipo: transport === 'pie' ? 'senda' : 'pista', puntos, origen: 'dibujado' })
+        guardada = ' y ruta guardada en Caminos'
+      }
+    }
     toast.show('Descargando el mapa de la ruta…')
     const r = await descargarRuta(points, `Ruta a ${d.nombre}`, settings.capa)
-    toast.show(r.estado === 'terminada' ? `Mapa de la ruta guardado${comoRuta && !local ? ' y ruta añadida al sitio' : ''}` : 'No se ha podido terminar la descarga del mapa')
+    toast.show(resultadoDescarga(r, `Mapa de la ruta guardado${guardada}`) + (guardada && (r.estado !== 'terminada' || r.fallos) ? ` La ruta sí se ha guardado${comoRuta ? ' en el sitio' : ' en Caminos'}.` : ''), { duration: 6000 })
   }
   const etapaTexto = d.etapa === 'aparcamiento' ? ' · al aparcamiento' : d.etapa === 'acceso' ? ' · a la entrada' : ''
   const verFoto = !!foto && !!nav && nav.straight < 150 && d.etapa !== 'aparcamiento'
@@ -261,7 +274,7 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
       <div className="grow">{next && !arrived && <div className="d">{next.dist < 15 ? 'Ahora' : `En ${formatDistance(next.dist)}`}</div>}<div className="txt">{instruction}</div>{then && !arrived && !nav?.offRoute && <div className="journey-then">Luego: {then.instruction.charAt(0).toLowerCase() + then.instruction.slice(1)}</div>}</div>
     </div>
     <div className="journey-map">
-      <MapView capa={settings.capa} bancales={d.bancal ? [d.bancal] : []} caminos={local ? caminos : undefined} route={points} coche={settings.coche ? [settings.coche.lat, settings.coche.lon] : null} punto={d.tipo === 'punto' || (d.etapa && d.etapa !== 'sitio') ? dest : null} user={fix ? { p: nav?.snapped ?? fix.p, acc: fix.acc } : null} heading={heading} navPuck routeDone={modo === 'directa' ? 0 : nav?.along} autoZoom={follow && fix ? zoomFor(fix.speed, transport) : null} follow={follow} onUserPan={() => setFollow(false)} selectedId={d.bancal?.id} initial={{ center: fix?.p ?? dest, zoom: 17 }} fit={!follow ? points : null} fitKey={fitKey} trail={trail} rotatable bearing={mapBearing} marcas={marcas} />
+      <MapView capa={settings.capa} bancales={d.bancal ? [d.bancal] : []} caminos={local || !remote.journey ? caminos : undefined} route={points} coche={settings.coche ? [settings.coche.lat, settings.coche.lon] : null} punto={d.tipo === 'punto' || (d.etapa && d.etapa !== 'sitio') ? dest : null} user={fix ? { p: nav?.snapped ?? fix.p, acc: fix.acc } : null} heading={heading} navPuck routeDone={modo === 'directa' ? 0 : nav?.along} autoZoom={follow && fix ? zoomFor(fix.speed, transport) : null} follow={follow} onUserPan={() => setFollow(false)} selectedId={d.bancal?.id} initial={{ center: fix?.p ?? dest, zoom: 17 }} fit={!follow ? points : null} fitKey={fitKey} trail={trail} rotatable bearing={mapBearing} marcas={marcas} />
       <div className="journey-tools">{modo !== 'directa' && <button className={`icon-btn float ${settings.mapaGira ? 'on' : ''}`} aria-label={settings.mapaGira ? 'Poner el norte arriba' : 'Girar el mapa hacia donde vas'} aria-pressed={settings.mapaGira} onClick={() => { void setSetting('mapaGira', !settings.mapaGira); setFollow(true) }}><Navigation2 size={21} /></button>}<button className={`icon-btn float ${follow ? 'on' : ''}`} aria-label="Seguir mi posición" onClick={() => setFollow(true)}><LocateFixed size={22} /></button><button className="icon-btn float" aria-label="Ver ruta completa" disabled={!points} onClick={() => { setFollow(false); setFitKey(String(Date.now())) }}><RouteIcon size={22} /></button>{modo === 'directa' && needsPermission && <button className="icon-btn float" aria-label="Activar brújula" onClick={() => void request()}><Compass size={21} /></button>}</div>
       {modo === 'directa' && nav && fix && <div className="journey-arrow float" aria-label="Dirección al punto"><ArrowUp size={30} style={{ transform: `rotate(${angleDiff(bearing(fix.p, nav.target) - (heading ?? 0))}deg)` }} /></div>}
       {transport !== 'pie' && fix && gpsOk && <div className="journey-speed float"><div className="figure num">{Math.round(fix.speed * 3.6)}</div><div className="meta">km/h</div></div>}
@@ -287,7 +300,7 @@ export function Navigate({ id, route: hash }: { id: string; route: string }) {
       {unsaved && <button className={`btn block ${arrived ? 'primary' : ''}`} onClick={() => void guardarRecorrido()}><Save size={18} /> Guardar el recorrido hecho · {formatDistance(trailLen)}</button>}
     </section>
     {exitOpen && <Sheet title="¿Guardar el recorrido?" onClose={() => setExitOpen(false)}>
-      <p className="meta">Llevas {formatDistance(trailLen)} recorridos. {comoRuta ? 'Se guardará como ruta propia del sitio, para seguirla sin conexión.' : 'Se guardará en Caminos.'}</p>
+      <p className="meta">Llevas {formatDistance(trailLen)} recorridos. {comoRuta ? inicioTramo > 0 ? 'Se guardará lo andado desde que dejaste el vehículo como ruta propia del sitio, para seguirla sin conexión.' : 'Se guardará como ruta propia del sitio, para seguirla sin conexión.' : 'Se guardará en Caminos.'}</p>
       <button className="btn primary block" onClick={() => void guardarRecorrido().then(salir)}><Save size={18} /> Guardar y salir</button>
       <button className="btn block" onClick={salir}>Salir sin guardar</button>
     </Sheet>}

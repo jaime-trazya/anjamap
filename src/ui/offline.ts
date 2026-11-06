@@ -2,7 +2,15 @@ import { useSyncExternalStore } from 'react'
 import { db, type Bancal, type Camino } from '../db/db'
 import { COMARCAS } from '../domain/comarcas'
 import { pathLength, type LatLon } from '../lib/geo'
-import { densify, descargaActual, descargar, suscribirDescarga, tilesAround, tilesForPolygons, type Capa, type Tile } from '../map/tiles'
+import { densify, descargaActual, descargar, suscribirDescarga, tilesAround, tilesForPolygons, type Capa, type Descarga, type Tile } from '../map/tiles'
+
+/** Mensaje tras una descarga: solo se da por buena si se han guardado todas las imágenes */
+export function resultadoDescarga(r: Descarga, ok: string): string {
+  if (r.estado === 'terminada' && !r.fallos) return ok
+  if (r.estado === 'terminada') return `Mapa incompleto: ${r.hechas} de ${r.total} imágenes. Vuelve a descargarlo con buena cobertura.`
+  if (r.estado === 'cancelada') return 'Descarga del mapa cancelada'
+  return 'No se ha podido descargar el mapa. Comprueba la conexión y vuelve a intentarlo.'
+}
 
 /** Las zonas de la capa de calles llevan sufijo; las de satélite conservan el id de siempre */
 export const zonaId = (id: string, capa: Capa) => (capa === 'satelite' ? id : `${id}-calles`)

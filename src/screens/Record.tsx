@@ -130,11 +130,17 @@ export function RecordScreen({ route }: { route: string }) {
 
   const guardar = async () => {
     if (tipo === 'ruta' && bancal) {
-      // La ruta tiene que ser continua para seguirla: los huecos se unen y se avisa antes de guardar
-      const puntos = simplify(draft.puntos, 1.5)
+      // No se inventa lo que no se grabó en las pausas: la ruta es el último tramo continuo (el que llega al bancal)
+      // y los tramos anteriores se guardan en Caminos, separados
+      if (!partes.length) return
+      const ultimo = partes[partes.length - 1]
+      const puntos = simplify(ultimo, 1.5)
       if (puntos.length < 2) return
-      await addRuta({ nombre: nombre.trim() || `Ruta a ${bancal.nombre}`, bancalId: bancal.id, puntos, origen: 'grabado' })
-      toast.show('Ruta guardada')
+      const base = nombre.trim() || `Ruta a ${bancal.nombre}`
+      await addRuta({ nombre: base, bancalId: bancal.id, puntos, origen: 'grabado' })
+      const previos = partes.slice(0, -1)
+      for (const [i, t] of previos.entries()) await addCamino({ nombre: `${base} · tramo ${i + 1}`, tipo: tipoCamino, puntos: simplify(t, 1.5), origen: 'grabado' })
+      toast.show(previos.length ? `Ruta guardada con el último tramo · ${previos.length} ${previos.length > 1 ? 'tramos anteriores' : 'tramo anterior'} en Caminos` : 'Ruta guardada', { duration: 6000 })
       saveDraft(tipo, bancal.id, null)
       navigate(`/bancal/${bancal.id}`, true)
       return
@@ -211,7 +217,7 @@ export function RecordScreen({ route }: { route: string }) {
           </p>
           {huecos > 0 && (
             <Notice tone="warn" icon={<TriangleAlert size={20} />} title={`Hay ${formatDistance(huecos)} sin grabar durante las pausas`}>
-              {tipo === 'ruta' ? 'Se unirán en línea recta para que la ruta sea continua. Si no es así, descarta y vuelve a grabar ese tramo.' : `Se guardarán ${partes.length} tramos separados, sin inventar el recorrido de la pausa.`}
+              {tipo === 'ruta' ? `No se une en línea recta: la ruta del bancal será el último tramo y ${partes.length > 2 ? `los ${partes.length - 1} anteriores` : 'el anterior'} se guardará${partes.length > 2 ? 'n' : ''} en Caminos.` : `Se guardarán ${partes.length} tramos separados, sin inventar el recorrido de la pausa.`}
             </Notice>
           )}
           {tipo === 'ruta' && endGap > 30 && (

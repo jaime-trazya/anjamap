@@ -38,18 +38,29 @@ export function desbloquearVoz() {
   window.speechSynthesis.speak(u)
 }
 
+/** Frase esperando a sonar: un aviso nuevo la sustituye y callar() la anula */
+let pendiente: number | null = null
+function anularPendiente() {
+  if (pendiente !== null) window.clearTimeout(pendiente)
+  pendiente = null
+}
+
 export function hablar(texto: string) {
   if (!disponible() || !texto.trim()) return
   const s = window.speechSynthesis
+  anularPendiente()
   s.cancel()
-  window.setTimeout(() => {
+  pendiente = window.setTimeout(() => {
+    pendiente = null
     s.resume()
     s.speak(frase(texto))
   }, 60)
 }
 
 export function callar() {
-  if (disponible()) window.speechSynthesis.cancel()
+  if (!disponible()) return
+  anularPendiente()
+  window.speechSynthesis.cancel()
 }
 
 /** «Gira a la derecha» → «En 300 metros, gira a la derecha» */
