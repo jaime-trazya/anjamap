@@ -31,3 +31,14 @@ describe('coordenadas escritas o pegadas', () => {
     expect(leerCoordenadas('120, 10')).toBeNull()
   })
 })
+
+describe('paradas', () => {
+  it('encadena la navegación a las siguientes paradas', async () => {
+    const { rutaNavegacion, leerSiguientes } = await import('./destino')
+    expect(rutaNavegacion('b:abc', ['p:39.1,-0.7', 'coche'])).toBe('/ir/abc?siguientes=p%3A39.1%2C-0.7%7Ccoche')
+    expect(rutaNavegacion('yo')).toBeNull()
+    const url = rutaNavegacion('p:39.1,-0.7', ['b:x'])!
+    expect(url.startsWith('/ir/punto?lat=39.100000&lon=-0.700000&siguientes=')).toBe(true)
+    expect(leerSiguientes(new URLSearchParams(url.split('?')[1]))).toEqual(['b:x'])
+  })
+})

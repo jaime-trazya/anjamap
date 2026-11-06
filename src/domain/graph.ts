@@ -544,3 +544,25 @@ export function giroTexto(p: Giro): string {
       return 'Deja el camino'
   }
 }
+
+/** Metros alrededor de un paso cerrado en los que los tramos quedan cortados */
+export const CIERRE = 15
+
+/**
+ * Red con los pasos cerrados cortados: los tramos a menos de `radio` metros de cada cierre pasan a coste infinito,
+ * así la ruta busca otro camino. Devuelve la misma red si no hay cierres.
+ */
+export function bloquear(g: Graph | null, cerrados: LatLon[], radio = CIERRE): Graph | null {
+  if (!g || !cerrados.length) return g
+  const ew = Float64Array.from(g.ew)
+  let n = 0
+  for (const p of cerrados) {
+    for (const c of nearEdges(g, toXY(p, g.ref), radio, 0)) {
+      if (c.d <= radio && ew[c.e] !== Infinity) {
+        ew[c.e] = Infinity
+        n++
+      }
+    }
+  }
+  return n ? { ...g, ew } : g
+}

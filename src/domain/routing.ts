@@ -12,6 +12,15 @@ export interface Journey {
   tailGap: number
   hasToll: boolean
   hasHighway: boolean
+  /** Otras rutas que ha encontrado el servidor (sin paradas intermedias) */
+  alternativas?: Journey[]
+}
+
+/** Paradas intermedias, pasos cerrados a evitar y cuántas alternativas pedir */
+export interface RouteExtra {
+  via?: LatLon[]
+  evitar?: LatLon[]
+  alternativas?: number
 }
 
 /** El perfil motor_scooter es una motocicleta: nunca se usa para un patinete. */
@@ -19,8 +28,9 @@ export interface Journey {
  * `heading` = hacia dónde te mueves (grados). Se manda a Valhalla para que la ruta salga en tu sentido de marcha
  * y no te proponga dar media vuelta donde no se puede: busca otro camino por delante.
  */
-export function routeRequest(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions, heading: number | null = null) {
-  if (!isLatLon(from) || !isLatLon(to)) throw new Error('Posición o destino no válidos')
+export function routeRequest(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions, heading: number | null = null, extra: RouteExtra = {}) {
+  const via = (extra.via ?? []).slice(0, 18)
+  if (!isLatLon(from) || !isLatLon(to) || !via.every(isLatLon)) throw new Error('Posición o destino no válidos')
   const origin: Record<string, number> = { lat: from[0], lon: from[1] }
   if (heading !== null && Number.isFinite(heading)) {
     origin.heading = Math.round(((heading % 360) + 360) % 360)
@@ -32,7 +42,13 @@ export function routeRequest(from: LatLon, to: LatLon, transport: Transporte, op
     : costing === 'pedestrian'
       ? { pedestrian: { walking_speed: 4.5, use_ferry: 0 } }
       : { bicycle: { bicycle_type: 'hybrid', cycling_speed: transport === 'patinete' ? Math.max(5, Math.min(25, options.velocidadPatinete)) : 18, use_roads: transport === 'patinete' ? 0 : 0.25, use_hills: transport === 'patinete' ? 0 : 0.25, use_ferry: 0 } }
-  return { locations: [origin, { lat: to[0], lon: to[1] }], costing, costing_options, units: 'kilometers', language: 'es-ES' }
+  const req: { locations: Record<string, unknown>[]; costing: string; costing_options: typeof costing_options; units: string; language: string; exclude_locations?: { lat: number; lon: number }[]; alternates?: number } = { locations: [origin, ...via.map((p) => ({ lat: p[0], lon: p[1], type: 'break' })), { lat: to[0], lon: to[1] }], costing, costing_options, units: 'kilometers', language: 'es-ES' }
+  // Pasos cerrados: el servidor evita la vía más cercana a cada uno (máx. 50, los más cercanos al recorrido directo)
+  const evitar = (extra.evitar ?? []).filter(isLatLon).filter((p) => distance(p, from) > 20 && distance(p, to) > 20)
+  if (evitar.length) req.exclude_locations = evitar.slice(0, 50).map((p) => ({ lat: p[0], lon: p[1] }))
+  // Las alternativas solo existen sin paradas intermedias
+  if (extra.alternativas && !via.length) req.alternates = Math.min(3, extra.alternativas)
+  return req
 }
 
 export function routeEndpoint(server: string): string {
@@ -95,7 +111,15 @@ export function parseJourney(data: unknown, dest: LatLon): Journey {
     for (let i = start; i < pts.length; i++) points.push(pts[i])
     offset += along[along.length - 1]
   }
-  return { points, steps, length: summary.length * (trip.units === 'miles' ? 1609.344 : 1000), seconds: summary.time, tailGap: distance(points[points.length - 1], dest), hasToll: summary.has_toll === true, hasHighway: summary.has_highway === true }
+  const journey: Journey = { points, steps, length: summary.length * (trip.units === 'miles' ? 1609.344 : 1000), seconds: summary.time, tailGap: distance(points[points.length - 1], dest), hasToll: summary.has_toll === true, hasHighway: summary.has_highway === true }
+  if (Array.isArray(data.alternates)) {
+    const alternativas: Journey[] = []
+    for (const a of data.alternates.slice(0, 3)) {
+      try { if (object(a)) alternativas.push(parseJourney({ trip: a.trip }, dest)) } catch { /* alternativa incompleta: se ignora */ }
+    }
+    if (alternativas.length) journey.alternativas = alternativas
+  }
+  return journey
 }
 
 export function remainingSeconds(journey: Journey, along: number): number {
@@ -108,7 +132,7 @@ export function formatDuration(seconds: number): string {
   return mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)} h${mins % 60 ? ` ${mins % 60} min` : ''}`
 }
 
-export async function fetchJourney(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions, signal?: AbortSignal, heading: number | null = null): Promise<Journey> {
+export async function fetchJourney(from: LatLon, to: LatLon, transport: Transporte, options: RouteOptions, signal?: AbortSignal, heading: number | null = null, extra: RouteExtra = {}): Promise<Journey> {
   const controller = new AbortController()
   const abort = () => controller.abort()
   if (signal?.aborted) throw new DOMException('Ruta cancelada', 'AbortError')
@@ -116,7 +140,7 @@ export async function fetchJourney(from: LatLon, to: LatLon, transport: Transpor
   let timeout = false
   const timer = setTimeout(() => { timeout = true; controller.abort() }, 20000)
   try {
-    const response = await fetch(routeEndpoint(options.servidorRutas), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'anjamap' }, body: JSON.stringify(routeRequest(from, to, transport, options, heading)), signal: controller.signal })
+    const response = await fetch(routeEndpoint(options.servidorRutas), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'anjamap' }, body: JSON.stringify(routeRequest(from, to, transport, options, heading, extra)), signal: controller.signal })
     if (response.status === 429) throw new Error('El servidor está ocupado. Espera un momento y vuelve a calcular.')
     if (!response.ok) throw new Error('No se ha podido calcular una ruta para ese destino y transporte')
     return parseJourney(await response.json(), to)
@@ -145,4 +169,50 @@ export function maniobra(type: number | undefined): Maniobra {
     case 4: case 5: case 6: return 'llegada'
     default: return 'recto'
   }
+}
+
+/**
+ * Orden de paradas que reduce el recorrido. Con conexión lo calcula el servidor (optimized_route, por calles);
+ * sin ella, el vecino más cercano en línea recta mejorado con 2-opt. La salida y la llegada no se mueven.
+ * Devuelve el orden como índices de `paradas`.
+ */
+export function ordenLocal(desde: LatLon, paradas: LatLon[], hasta: LatLon | null): number[] {
+  const n = paradas.length
+  if (n < 2) return paradas.map((_, i) => i)
+  const left = new Set(paradas.map((_, i) => i))
+  const order: number[] = []
+  let cur = desde
+  while (left.size) {
+    let best = -1
+    for (const i of left) if (best < 0 || distance(cur, paradas[i]) < distance(cur, paradas[best])) best = i
+    order.push(best)
+    left.delete(best)
+    cur = paradas[best]
+  }
+  const pts = (o: number[]) => [desde, ...o.map((i) => paradas[i]), ...(hasta ? [hasta] : [])]
+  const len = (o: number[]) => pathLength(pts(o))
+  let improved = true
+  while (improved) {
+    improved = false
+    for (let i = 0; i < n - 1; i++)
+      for (let k = i + 1; k < n; k++) {
+        const o = [...order.slice(0, i), ...order.slice(i, k + 1).reverse(), ...order.slice(k + 1)]
+        if (len(o) < len(order) - 0.5) { order.splice(0, n, ...o); improved = true }
+      }
+  }
+  return order
+}
+
+export async function ordenServidor(desde: LatLon, paradas: LatLon[], hasta: LatLon | null, transport: Transporte, options: RouteOptions): Promise<number[]> {
+  const costing = transport === 'coche' ? 'auto' : transport === 'pie' ? 'pedestrian' : 'bicycle'
+  // Sin llegada fija se vuelve al punto de salida (el servidor necesita un final)
+  const fin = hasta ?? desde
+  const locations = [desde, ...paradas, fin].map((p) => ({ lat: p[0], lon: p[1] }))
+  const url = routeEndpoint(options.servidorRutas).replace(/\/route$/, '/optimized_route')
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Client-Id': 'anjamap' }, body: JSON.stringify({ locations, costing, units: 'kilometers' }) })
+  if (!r.ok) throw new Error('No se ha podido ordenar las paradas')
+  const j = (await r.json()) as { trip?: { locations?: { original_index?: number }[] } }
+  const idx = (j.trip?.locations ?? []).map((l) => l.original_index).filter((i): i is number => Number.isInteger(i) && i! > 0 && i! <= paradas.length).map((i) => i - 1)
+  if (idx.length !== paradas.length || new Set(idx).size !== idx.length) throw new Error('Respuesta de orden incompleta')
+  return idx
 }

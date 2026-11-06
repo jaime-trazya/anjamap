@@ -18,6 +18,8 @@ export function BancalesScreen() {
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<string[]>([])
   const [transfer, setTransfer] = useState(false)
+  // Enviar una zona completa: todos los sitios del grupo con sus fotos y rutas
+  const [grupo, setGrupo] = useState<string[] | null>(null)
   const toggle = (id: string) => setSelected((list) => list.includes(id) ? list.filter((v) => v !== id) : [...list, id])
   const items = useMemo(() => {
     const list = bancales.filter((b) => !q || norm(`${b.nombre} ${b.finca ?? ''} ${b.nota ?? ''}`).includes(norm(q)))
@@ -41,7 +43,7 @@ export function BancalesScreen() {
     </>}
     {selecting && <div className="row"><button className="btn small" onClick={() => setSelected(items.map(({ b }) => b.id))}>Seleccionar visibles</button><button className="btn primary block" disabled={!selected.length} onClick={() => setTransfer(true)}><Share2 size={17} /> Enviar {selected.length}</button></div>}
     {!bancales.length ? <section className="card"><Empty title="Aún no hay bancales" action={<button className="btn primary" onClick={() => editor.openAdd()}>Añadir bancal</button>}>Guarda tu posición, marca un punto en el mapa o importa los bancales que te hayan enviado.</Empty></section> : !items.length ? <p className="empty">Nada coincide con «{q}»</p> : groups.map((group) => <section key={group.name || '_'} className="stack" style={{ gap: 6 }}>
-      {porGrupo && <div className="group-head"><span>{group.name || 'Sin grupo'}</span><span>{group.items.length}</span></div>}
+      {porGrupo && <div className="group-head"><span>{group.name || 'Sin grupo'}</span><span className="row" style={{ gap: 8 }}>{group.items.length}{group.name && !selecting && <button className="btn small" aria-label={`Enviar el grupo ${group.name}`} onClick={() => setGrupo(group.items.map(({ b }) => b.id))}><Share2 size={15} /> Enviar grupo</button>}</span></div>}
       <div className="card flush list">{group.items.map(({ b, d, rumbo }) => <div className="row saved-place" key={b.id}>
         {selecting && <label className="selection-check"><input type="checkbox" aria-label={`Seleccionar ${b.nombre}`} checked={selected.includes(b.id)} onChange={() => toggle(b.id)} /></label>}
         <a className="list-item tap grow" href={`#/bancal/${b.id}`} onClick={(e) => { if (selecting) { e.preventDefault(); toggle(b.id) } }}>
@@ -51,6 +53,7 @@ export function BancalesScreen() {
         </a>
       </div>)}</div>
     </section>)}
+    {grupo && <TransferSheet ids={grupo} onClose={() => setGrupo(null)} />}
     {transfer && <TransferSheet ids={selecting && selected.length ? selected : undefined} onClose={() => setTransfer(false)} />}
   </main>
 }

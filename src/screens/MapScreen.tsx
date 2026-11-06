@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Car, ChevronRight, ClipboardPaste, Clock, Layers, LocateFixed, MapPinPlus, Navigation, Plus, Route as RouteIcon, Search, Star } from 'lucide-react'
+import { Ban, Car, ChevronRight, ClipboardPaste, Clock, Info, Layers, LocateFixed, MapPinPlus, Navigation, Plus, Route as RouteIcon, Search, Star } from 'lucide-react'
 import { MapView } from '../map/MapView'
-import { setSetting, type Bancal } from '../db/db'
+import { setSetting, type Bancal, type Marca } from '../db/db'
+import { MarcaSheet } from '../ui/MarcaSheet'
+import { MicButton } from '../ui/MicButton'
 import { bearing, distance, formatDistance, walkMinutes, type LatLon } from '../lib/geo'
 import { hace } from '../lib/fecha'
 import { useData } from '../ui/useData'
@@ -15,7 +17,8 @@ import { MiniArrow, Sheet } from '../ui/components'
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
 export function MapScreen() {
-  const { bancales, caminos, rutas, settings, osm } = useData()
+  const { bancales, caminos, rutas, marcas, settings, osm } = useData()
+  const [marcaSheet, setMarcaSheet] = useState<{ marca?: Marca; punto?: LatLon; tipo?: Marca['tipo'] } | null>(null)
   const editor = useEditor()
   const toast = useToast()
   const { fix, error } = usePosition()
@@ -74,6 +77,8 @@ export function MapScreen() {
         showComarcas
         onBancalClick={(b) => setSelId(b.id)}
         onCocheClick={() => setCocheSheet(true)}
+        marcas={marcas}
+        onMarcaClick={(m) => setMarcaSheet({ marca: m })}
         onLongPress={(p) => setPress(p)}
         onTap={() => setSelId(null)}
         onUserPan={() => setFollow(false)}
@@ -258,9 +263,35 @@ export function MapScreen() {
               </span>
               <div className="grow primary-line">Planificar ruta hasta aquí</div>
             </button>
+            <button
+              className="list-item"
+              onClick={() => {
+                setMarcaSheet({ punto: press, tipo: 'cerrado' })
+                setPress(null)
+              }}
+            >
+              <span className="tile sm none">
+                <Ban size={18} />
+              </span>
+              <div className="grow"><div className="primary-line">Paso cerrado aquí</div><div className="secondary-line">Puerta, cadena o camino cortado: las rutas lo evitan</div></div>
+            </button>
+            <button
+              className="list-item"
+              onClick={() => {
+                setMarcaSheet({ punto: press, tipo: 'referencia' })
+                setPress(null)
+              }}
+            >
+              <span className="tile sm none">
+                <Info size={18} />
+              </span>
+              <div className="grow"><div className="primary-line">Referencia aquí</div><div className="secondary-line">«Gira junto a la caseta»: se lee al pasar</div></div>
+            </button>
           </section>
         </Sheet>
       )}
+
+      {marcaSheet && <MarcaSheet {...marcaSheet} onClose={() => setMarcaSheet(null)} />}
 
       {cocheSheet && coche && settings.coche && (
         <Sheet title="El coche" onClose={() => setCocheSheet(false)}>
@@ -327,6 +358,7 @@ function BuscarSheet({ bancales, recientes, pos, onClose, onPick, onCoords }: { 
       <div className="search">
         <Search size={19} />
         <input className="input" type="search" aria-label="Buscar bancal" autoFocus placeholder="Nombre, zona, nota o coordenadas…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <MicButton onText={setQ} />
       </div>
       {coords && (
         <section className="card flush list">

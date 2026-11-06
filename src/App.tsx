@@ -1,5 +1,10 @@
-import { useEffect, useState } from 'react'
-import { Car, Footprints, List, LocateFixed, Map as MapIcon, MapPinPlus, PenLine, Settings as SettingsIcon, Waypoints } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { Camera, Car, Footprints, List, LocateFixed, Map as MapIcon, MapPinPlus, PenLine, ScanLine, Settings as SettingsIcon, Waypoints } from 'lucide-react'
+import { gpsDeJpeg } from './lib/exif'
+import { preparePhoto } from './ui/photos'
+import { pickFile } from './ui/files'
+import { QrScanner } from './ui/Qr'
+import { puedeEscanear } from './ui/qrUtil'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { DataProvider } from './ui/data'
 import { useData } from './ui/useData'
@@ -64,8 +69,22 @@ function UpdatePrompt() {
   )
 }
 
-function AddSheet({ onClose, editor }: { onClose: () => void; editor: EditorApi }) {
+function AddSheet({ onClose, editor, onScan }: { onClose: () => void; editor: EditorApi; onScan: () => void }) {
   const toast = useToast()
+  // Sitio desde una foto: usa la posición GPS guardada en la foto y la añade al sitio
+  const desdeFoto = async () => {
+    onClose()
+    const file = await pickFile('image/jpeg,image/*')
+    if (!file) return
+    try {
+      const p = gpsDeJpeg(await file.arrayBuffer())
+      if (!p) return toast.show('Esta foto no tiene ubicación GPS. Activa la ubicación en la cámara o márcalo en el mapa.', { duration: 6000 })
+      const foto = await preparePhoto(file).catch(() => undefined)
+      editor.openBancal(undefined, { point: p, precision: null, foto, nombre: file.name.replace(/.[^.]+$/, '').slice(0, 60) || undefined })
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : 'No se ha podido leer la foto')
+    }
+  }
   const go = (path: string) => {
     onClose()
     navigate(path)
@@ -83,6 +102,17 @@ function AddSheet({ onClose, editor }: { onClose: () => void; editor: EditorApi 
         if (!f || Date.now() - f.t > 30000) return toast.show('Espera una posición GPS actualizada para guardar el coche')
         void setSetting('coche', { lat: f.p[0], lon: f.p[1], t: Date.now() })
         toast.show('Coche guardado aquí')
+      },
+    },
+    { icon: Camera, title: 'Sitio desde una foto', sub: 'Con la ubicación GPS que guarda la foto', run: () => void desdeFoto() },
+    {
+      icon: ScanLine,
+      title: 'Escanear código QR',
+      sub: 'De un sitio que te enseñan en otro móvil',
+      run: () => {
+        onClose()
+        if (puedeEscanear()) onScan()
+        else toast.show('Abre la cámara del móvil, enfoca el código y pulsa el enlace: se abrirá aquí.', { duration: 7000 })
       },
     },
     { icon: Footprints, title: 'Grabar camino andando', sub: 'Se apunta el recorrido con el GPS', run: () => go('/grabar?tipo=camino') },
@@ -114,6 +144,8 @@ function Shell() {
   useTheme()
   const [bancalEdit, setBancalEdit] = useState<{ id?: string; opts?: NewBancalOpts; key: number } | null>(null)
   const [adding, setAdding] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const closeScan = useCallback(() => setScanning(false), [setScanning])
   const [editor] = useState<EditorApi>(() => ({
     openBancal: (id, opts) => setBancalEdit({ id, opts, key: Date.now() }),
     openAdd: () => setAdding(true),
@@ -169,7 +201,8 @@ function Shell() {
             </div>
           </nav>
         )}
-        {adding && <AddSheet editor={editor} onClose={() => setAdding(false)} />}
+        {adding && <AddSheet editor={editor} onClose={() => setAdding(false)} onScan={() => setScanning(true)} />}
+        {scanning && <QrScanner onClose={closeScan} />}
         {bancalEdit && <BancalEditor key={bancalEdit.key} id={bancalEdit.id} opts={bancalEdit.opts} onClose={() => setBancalEdit(null)} />}
         {ready && <InstallHint />}
         <UpdatePrompt />

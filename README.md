@@ -47,12 +47,27 @@ Al calcular una ruta, el servidor recibe el origen, destino y preferencias. Las 
 
 Desde el mapa (botón de ruta), desde la ficha de un sitio o manteniendo pulsado un punto: elige la salida (tu posición, el coche, un sitio, un punto del mapa o unas coordenadas) y el destino. Se ve el tiempo, la distancia y las indicaciones, se pueden comparar los cuatro transportes y guardar la ruta y el mapa de la zona para cuando no haya cobertura. A pie y sin conexión se planifica con los caminos guardados en el móvil.
 
+- **Varias paradas** (hasta 10): «Ordenar paradas» propone el orden que recorre menos (por calles con conexión; en línea recta sin ella). Al empezar se navega a la primera y al llegar se pasa a la siguiente.
+- **Otras rutas**: si el servidor encuentra alternativas, se pueden elegir al planificar y, al navegar, en «Opciones».
+
+### Pasos cerrados y referencias
+
+Manteniendo pulsado el mapa:
+
+- **Paso cerrado aquí** (puerta, cadena, camino cortado): las rutas lo evitan, tanto las del servidor como las de la red local sin conexión. Tocándolo se quita cuando vuelve a estar abierto.
+- **Referencia aquí** («gira junto a la caseta»): al navegar se muestra y se lee en voz alta cuando pasas cerca.
+
 ### Otras ayudas
 
 - **Favoritos** a un toque desde el mapa y **recientes** al buscar.
+- **Buscar hablando** con el micrófono del buscador (si el navegador lo permite).
 - **Coordenadas**: se pueden pegar en el buscador (decimales, grados-minutos-segundos o un enlace de Google Maps).
-- **Deshacer** al borrar o mover un sitio.
-- **Importar sin duplicar**: el mismo GPX dos veces no repite sitios ni caminos, y un sitio igual (mismo nombre a menos de 5 m) se conserva sin duplicar.
+- **Sitio desde una foto**: en «+», usa la ubicación GPS guardada en la foto (si la tiene) y añade la foto al sitio.
+- **Código QR** de cada sitio para pasarlo a otro móvil: se escanea con la cámara (o con «Escanear código QR» en Android).
+- **Enviar un grupo** completo (sitios, fotos y rutas) desde Bancales → «Por grupo».
+- **Importar CSV** de una hoja de cálculo: columnas de nombre, latitud y longitud (o coordenadas), y opcionalmente finca y nota. Admite punto y coma y coma decimal.
+- **Deshacer** al borrar o mover un sitio, o al quitar un paso cerrado.
+- **Importar sin duplicar**: el mismo GPX o CSV dos veces no repite sitios ni caminos, y un sitio igual (mismo nombre a menos de 5 m) se conserva sin duplicar.
 
 La ruta se calcula con conexión. Si se pierde cobertura durante la sesión, se conserva el trazado; los desvíos requieren conexión para recalcularse. La orientación local y los recorridos propios a pie funcionan sin conexión, pero pueden atravesar campo y no verifican restricciones de paso. La red local cubre la Canal de Navarrés y La Costera. El satélite se descarga desde Ajustes.
 

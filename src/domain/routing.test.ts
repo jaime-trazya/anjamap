@@ -140,3 +140,26 @@ describe('recalcular hacia delante', () => {
     expect(routeRequest([39.1, -0.69], [39.2, -0.7], 'coche', DEFAULT_SETTINGS).locations[0]).not.toHaveProperty('heading')
   })
 })
+
+describe('ordenar paradas', () => {
+  it('propone el orden que recorre menos sin conexión', async () => {
+    const { ordenLocal } = await import('./routing')
+    const desde: LatLon = [39.1, -0.7]
+    // Paradas desordenadas a lo largo de una línea hacia el norte
+    const paradas: LatLon[] = [[39.13, -0.7], [39.11, -0.7], [39.14, -0.7], [39.12, -0.7]]
+    expect(ordenLocal(desde, paradas, [39.15, -0.7])).toEqual([1, 3, 0, 2])
+    expect(ordenLocal(desde, [[39.11, -0.7]], null)).toEqual([0])
+  })
+})
+
+describe('evitar pasos cerrados y alternativas', () => {
+  it('añade paradas, zonas a evitar y alternativas a la petición', () => {
+    const r = routeRequest([39.1, -0.69], [39.2, -0.7], 'pie', DEFAULT_SETTINGS, null, { via: [[39.15, -0.69]], evitar: [[39.12, -0.69], [39.1, -0.69]], alternativas: 2 })
+    expect(r.locations).toHaveLength(3)
+    expect(r.locations[1]).toMatchObject({ type: 'break' })
+    // El cierre junto a la salida no se manda (te dejaría sin ruta) y sin paradas no hay alternativas
+    expect(r.exclude_locations).toEqual([{ lat: 39.12, lon: -0.69 }])
+    expect(r.alternates).toBeUndefined()
+    expect(routeRequest([39.1, -0.69], [39.2, -0.7], 'pie', DEFAULT_SETTINGS, null, { alternativas: 2 }).alternates).toBe(2)
+  })
+})

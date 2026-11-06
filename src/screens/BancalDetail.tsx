@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Car, ChevronLeft, Copy, DoorOpen, Download, Footprints, Move, Navigation, PenLine, Pencil, Route as RouteIcon, Share2, Star, X } from 'lucide-react'
+import { Car, ChevronLeft, QrCode as QrIcon, Copy, DoorOpen, Download, Footprints, Move, Navigation, PenLine, Pencil, Route as RouteIcon, Share2, Star, X } from 'lucide-react'
 import { MapView } from '../map/MapView'
 import { distance, formatCoord, formatDistance, pathLength, type LatLon } from '../lib/geo'
 import { enlaceBancal } from '../ui/destino'
@@ -11,6 +11,7 @@ import { useToast } from '../ui/toast'
 import { BackBar, Empty } from '../ui/components'
 import { PhotoGallery } from '../ui/PhotoGallery'
 import { TransferSheet } from '../ui/TransferSheet'
+import { QrSheet } from '../ui/Qr'
 import { TransportPicker } from '../ui/TransportPicker'
 import { db, setSetting } from '../db/db'
 import { codigoLugar } from '../ui/destino'
@@ -21,6 +22,7 @@ export function BancalDetail({ id }: { id: string }) {
   const editor = useEditor()
   const toast = useToast()
   const [transfer, setTransfer] = useState(false)
+  const [qr, setQr] = useState(false)
   const b = bancales.find((x) => x.id === id)
   const propias = rutas.filter((r) => r.bancalId === id)
   if (!b) return <main className="screen sub"><BackBar label="Bancales" fallback="/bancales" /><Empty title="Este bancal ya no existe" /></main>
@@ -48,6 +50,7 @@ export function BancalDetail({ id }: { id: string }) {
     <div className="actions">
       <button className="action" onClick={() => void compartir()}><Share2 size={22} /> Enviar enlace</button>
       <button className="action" onClick={() => setTransfer(true)}><Download size={22} /> Enviar con fotos</button>
+      <button className="action" onClick={() => setQr(true)}><QrIcon size={22} /> Código QR</button>
       <button className="action" onClick={() => navigate(`/dibujar?tipo=mover&bancal=${id}`)}><Move size={22} /> Mover</button>
       <button className="action" onClick={() => void copiar(formatCoord(dest), 'Coordenadas copiadas')}><Copy size={22} /> Coordenadas</button>
     </div>
@@ -70,5 +73,6 @@ export function BancalDetail({ id }: { id: string }) {
       <button className="list-item" onClick={() => navigate(`/dibujar?tipo=ruta&bancal=${id}`)}><PenLine size={19} /><span className="grow primary-line">Dibujar un acceso</span></button>
     </section>
     {transfer && <TransferSheet ids={[id]} onClose={() => setTransfer(false)} />}
+    {qr && <QrSheet title={b.nombre} text={enlaceBancal(b)} onClose={() => setQr(false)} />}
   </main>
 }

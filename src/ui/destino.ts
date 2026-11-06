@@ -117,3 +117,23 @@ export function enlaceBancal(b: Pick<Bancal, 'nombre' | 'lat' | 'lon' | 'finca' 
   q.set('c', b.color)
   return `${location.origin}${location.pathname}#/compartido?${q}`
 }
+
+/**
+ * Dirección para navegar a un lugar de ruta planificada, con las paradas que quedan detrás
+ * (`siguientes`, en orden). null si el lugar no es navegable (tu propia ubicación).
+ */
+export function rutaNavegacion(codigo: string, siguientes: string[] = []): string | null {
+  const resto = siguientes.length ? `siguientes=${encodeURIComponent(siguientes.join('|'))}` : ''
+  if (codigo.startsWith('b:')) return `/ir/${codigo.slice(2)}${resto ? `?${resto}` : ''}`
+  if (codigo === 'coche') return `/ir/coche${resto ? `?${resto}` : ''}`
+  if (codigo.startsWith('p:')) {
+    const p = leerCoordenadas(codigo.slice(2))
+    return p ? `${irAPunto(p)}${resto ? `&${resto}` : ''}` : null
+  }
+  return null
+}
+
+/** Paradas pendientes guardadas en la dirección de navegación */
+export function leerSiguientes(params: URLSearchParams): string[] {
+  return (params.get('siguientes') ?? '').split('|').filter((c) => c === 'coche' || /^b:[\w-]+$/.test(c) || /^p:-?\d/.test(c)).slice(0, 20)
+}

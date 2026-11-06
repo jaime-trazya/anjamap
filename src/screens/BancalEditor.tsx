@@ -74,6 +74,7 @@ export function BancalEditor({ id, opts, onClose }: { id?: string; opts?: NewBan
       actualizado: now,
     }
     await db.bancales.put(b)
+    if (!existing && opts?.foto) await db.fotos.add({ id: uid(), bancalId: b.id, nombre: 'Foto', dataUrl: opts.foto, creado: now })
     onClose()
     if (!existing) {
       toast.show(`«${b.nombre}» guardado`, { action: { label: 'Ver', run: () => navigate(`/bancal/${b.id}`) } })

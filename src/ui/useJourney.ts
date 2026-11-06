@@ -6,14 +6,22 @@ import type { Fix } from './position'
 
 interface State { key: string; journey: Journey | null; loading: boolean; error: string | null }
 
-/** Conserva el recorrido al perder cobertura y consulta de nuevo solo si hay un desvío real. */
-/** `offRef` lo actualiza la pantalla: desvío confirmado por el seguimiento (varias lecturas seguidas fuera de la ruta). */
-export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Transporte, options: RouteOptions, enabled: boolean, offRef?: { readonly current: boolean }) {
+/**
+ * Ruta calculada por el servidor mientras navegas.
+ * - Conserva el recorrido al perder cobertura y consulta de nuevo solo si hay un desvío real.
+ * - `offRef` lo actualiza la pantalla: desvío o sentido contrario confirmados en varias lecturas.
+ * - `evitar`: pasos cerrados que la ruta no debe atravesar.
+ * - La primera ruta trae alternativas; `elegir` cambia a una de ellas.
+ */
+export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Transporte, options: RouteOptions, enabled: boolean, offRef?: { readonly current: boolean }, evitar: LatLon[] = []) {
   const latestFix = useRef(fix)
   useEffect(() => { latestFix.current = fix }, [fix])
+  const evitarKey = evitar.map((p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`).join(';')
+  const evitarRef = useRef(evitar)
+  useEffect(() => { evitarRef.current = evitar })
   const [attempt, setAttempt] = useState(0)
   const [state, setState] = useState<State>({ key: '', journey: null, loading: false, error: null })
-  const base = `${dest?.join(',')}/${transport}/${options.servidorRutas}/${options.evitarPeajes}/${options.evitarAutopistas}/${options.velocidadPatinete}`
+  const base = `${dest?.join(',')}/${transport}/${options.servidorRutas}/${options.evitarPeajes}/${options.evitarAutopistas}/${options.velocidadPatinete}/${evitarKey}`
   const key = `${base}/${attempt}`
   // Última ruta buena para este destino y transporte: al pulsar «Recalcular» no se pierde si la nueva consulta falla
   const [lastGood, setLastGood] = useState<{ base: string; journey: Journey | null }>({ base: '', journey: null })
@@ -23,10 +31,11 @@ export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Tran
   useEffect(() => {
     if (!enabled || lat === undefined || lon === undefined) return
     let alive = true, pending = false, lastTry = 0
-    let journey: Journey | null = kept.current.base === base ? kept.current.journey : null
+    const current = () => (kept.current.base === base ? kept.current.journey : null)
     const controller = new AbortController()
     const calculate = async (force = false) => {
       const f = latestFix.current
+      const journey = current()
       if (!alive || pending || !f || Date.now() - f.t > 30000) return
       if (f.acc > 100) {
         setState({ key, journey, loading: false, error: `GPS poco preciso (±${Math.round(f.acc)} m). Espera a que mejore para calcular la ruta.` })
@@ -46,17 +55,19 @@ export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Tran
       // En marcha se manda el rumbo: la ruta nueva sale hacia delante en vez de mandarte dar la vuelta
       const moving = f.speed !== null && f.speed > (transport === 'pie' ? 1.2 : 2.5)
       const heading = moving ? f.heading : null
-      const options = { servidorRutas, evitarPeajes, evitarAutopistas, velocidadPatinete }
+      const opts = { servidorRutas, evitarPeajes, evitarAutopistas, velocidadPatinete }
+      // Alternativas solo en el primer cálculo (al recalcular por un desvío interesa la más rápida)
+      const extra = { evitar: evitarRef.current, alternativas: journey ? 0 : 2 }
       try {
         let next: Journey
         try {
-          next = await fetchJourney(f.p, [lat, lon], transport, options, controller.signal, heading)
+          next = await fetchJourney(f.p, [lat, lon], transport, opts, controller.signal, heading, extra)
         } catch (error) {
           // Si con el rumbo no encuentra ruta (calle cortada por delante), se intenta sin él
           if (heading === null || controller.signal.aborted) throw error
-          next = await fetchJourney(f.p, [lat, lon], transport, options, controller.signal)
+          next = await fetchJourney(f.p, [lat, lon], transport, opts, controller.signal, null, extra)
         }
-        if (alive) { journey = next; kept.current = { base, journey }; setLastGood({ base, journey }); setState({ key, journey, loading: false, error: null }) }
+        if (alive) { kept.current = { base, journey: next }; setLastGood({ base, journey: next }); setState({ key, journey: next, loading: false, error: null }) }
       } catch (error) {
         if (alive) setState({ key, journey, loading: false, error: error instanceof Error ? error.message : 'No se ha podido calcular la ruta' })
       } finally { pending = false }
@@ -69,6 +80,12 @@ export function useJourney(fix: Fix | null, dest: LatLon | null, transport: Tran
     return () => { alive = false; controller.abort(); window.clearTimeout(initial); window.clearInterval(timer); window.removeEventListener('online', online) }
   }, [key, base, attempt, lat, lon, transport, servidorRutas, evitarPeajes, evitarAutopistas, velocidadPatinete, enabled, offRef])
   const retry = useCallback(() => setAttempt((value) => value + 1), [])
+  /** Cambia a otra ruta (una alternativa); conserva la lista para poder volver */
+  const elegir = useCallback((journey: Journey) => {
+    kept.current = { base, journey }
+    setLastGood({ base, journey })
+    setState({ key, journey, loading: false, error: null })
+  }, [base, key])
   const visible = state.key === key && enabled ? state : { journey: enabled && lastGood.base === base ? lastGood.journey : null, loading: false, error: null }
-  return { ...visible, retry }
+  return { ...visible, retry, elegir }
 }

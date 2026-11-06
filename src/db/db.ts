@@ -73,6 +73,19 @@ export interface Zona {
   fecha: number
 }
 
+/**
+ * Marca en el mapa: un paso cerrado (puerta, cadena, camino cortado) que las rutas evitan,
+ * o una referencia propia («gira junto a la caseta») que se lee al pasar cerca navegando.
+ */
+export interface Marca {
+  id: string
+  tipo: 'cerrado' | 'referencia'
+  lat: number
+  lon: number
+  texto: string
+  creado: number
+}
+
 export interface Foto {
   id: string
   bancalId: string
@@ -101,6 +114,7 @@ export class AnjamapDB extends Dexie {
   ajustes!: Table<Ajuste, string>
   diario!: Table<Apunte, string>
   fotos!: Table<Foto, string>
+  marcas!: Table<Marca, string>
 
   constructor(name = DB_NAME) {
     super(name)
@@ -114,6 +128,7 @@ export class AnjamapDB extends Dexie {
     this.version(2).stores({ diario: 'id, bancalId, fecha' })
     // Se conserva la tabla antigua por compatibilidad; la app ya no usa el diario.
     this.version(3).stores({ fotos: 'id, bancalId, creado' })
+    this.version(4).stores({ marcas: 'id, tipo' })
   }
 }
 
@@ -198,16 +213,18 @@ export interface Backup {
   rutas: Ruta[]
   diario?: Apunte[]
   fotos?: Foto[]
+  /** Pasos cerrados y referencias (solo en copias completas) */
+  marcas?: Marca[]
 }
 
 export async function exportBackup(database = db, ids?: string[]): Promise<Backup> {
-  return database.transaction('r', [database.bancales, database.caminos, database.rutas, database.fotos], async () => {
-    const [all, caminos, allRutas, allFotos] = await Promise.all([database.bancales.toArray(), database.caminos.toArray(), database.rutas.toArray(), database.fotos.toArray()])
+  return database.transaction('r', [database.bancales, database.caminos, database.rutas, database.fotos, database.marcas], async () => {
+    const [all, caminos, allRutas, allFotos, marcas] = await Promise.all([database.bancales.toArray(), database.caminos.toArray(), database.rutas.toArray(), database.fotos.toArray(), database.marcas.toArray()])
     const selected = ids ? new Set(ids) : null
     // Las nuevas copias contienen los datos del lugar, sin los antiguos campos agrícolas.
     const bancales = all.filter((b) => !selected || selected.has(b.id)).map(({ id, nombre, finca, nota, lat, lon, precision, color, acceso, aparcamiento, favorito, creado, actualizado }) => ({ id, nombre, finca, nota, lat, lon, precision, color, acceso, aparcamiento, favorito, creado, actualizado }))
     const included = new Set(bancales.map((b) => b.id))
-    return { app: 'anjamap' as const, version: 3 as const, fecha: new Date().toISOString(), bancales, caminos: selected ? [] : caminos, rutas: allRutas.filter((r) => included.has(r.bancalId)), fotos: allFotos.filter((f) => included.has(f.bancalId)) }
+    return { app: 'anjamap' as const, version: 3 as const, fecha: new Date().toISOString(), bancales, caminos: selected ? [] : caminos, rutas: allRutas.filter((r) => included.has(r.bancalId)), fotos: allFotos.filter((f) => included.has(f.bancalId)), marcas: selected ? [] : marcas }
   })
 }
 
@@ -233,6 +250,11 @@ export function validateBackup(data: unknown): Backup {
   const diario = data.diario ?? []
   if (data.fotos !== undefined && !Array.isArray(data.fotos)) throw new Error('Copia dañada: fotos')
   const fotos = data.fotos ?? []
+  if (data.marcas !== undefined && !Array.isArray(data.marcas)) throw new Error('Copia dañada: marcas')
+  const marcas = data.marcas ?? []
+  for (const x of marcas) {
+    if (!record(x) || !text(x.id) || !['cerrado', 'referencia'].includes(x.tipo as string) || !isLatLon([x.lat, x.lon]) || typeof x.texto !== 'string' || !timestamp(x.creado)) throw new Error('Copia dañada: marca no válida')
+  }
   // Validar antes de abrir la transacción que puede reemplazar los datos actuales.
   for (const rows of [data.bancales, data.caminos, data.rutas, diario, fotos]) {
     const ids = new Set<string>()
@@ -257,7 +279,7 @@ export function validateBackup(data: unknown): Backup {
   for (const x of data.rutas) if (!bancales.has(x.bancalId) || !optionalText(x.nota)) throw new Error('Copia dañada: ruta sin bancal')
   for (const x of diario) if (!validApunte(x) || !timestamp(x.creado) || !bancales.has(x.bancalId)) throw new Error('Copia dañada: apunte no válido o sin bancal')
   for (const x of fotos) if (!bancales.has(x.bancalId) || !text(x.nombre) || !timestamp(x.creado) || typeof x.dataUrl !== 'string' || x.dataUrl.length > 5_000_000 || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(x.dataUrl)) throw new Error('Copia dañada: foto no válida o sin bancal')
-  return { ...data, diario, fotos } as unknown as Backup
+  return { ...data, diario, fotos, marcas } as unknown as Backup
 }
 
 const mismoNombre = (a: string, b: string) => a.trim().toLocaleLowerCase('es') === b.trim().toLocaleLowerCase('es')
@@ -270,15 +292,15 @@ const mismoNombre = (a: string, b: string) => a.trim().toLocaleLowerCase('es') =
  */
 export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', database = db): Promise<{ repetidos: number }> {
   b = validateBackup(b)
-  return database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario, database.fotos], async () => {
-    if (modo === 'reemplazar') await Promise.all([database.bancales.clear(), database.caminos.clear(), database.rutas.clear(), database.diario.clear(), database.fotos.clear()])
+  return database.transaction('rw', [database.bancales, database.caminos, database.rutas, database.diario, database.fotos, database.marcas], async () => {
+    if (modo === 'reemplazar') await Promise.all([database.bancales.clear(), database.caminos.clear(), database.rutas.clear(), database.diario.clear(), database.fotos.clear(), database.marcas.clear()])
     let { bancales, caminos } = b
     const remap = new Map<string, string>()
     if (modo === 'fusionar') {
       const existentes = await database.bancales.toArray()
       const ids = new Set(existentes.map((e) => e.id))
       bancales = bancales.filter((x) => {
-        if (x.id.startsWith('gpx-') && ids.has(x.id)) return false
+        if (/^(gpx|csv)-/.test(x.id) && ids.has(x.id)) return false
         const dup = existentes.find((e) => e.id !== x.id && mismoNombre(e.nombre, x.nombre) && distance([e.lat, e.lon], [x.lat, x.lon]) < 5)
         if (dup) remap.set(x.id, dup.id)
         return !dup
@@ -292,6 +314,7 @@ export async function importBackup(b: Backup, modo: 'fusionar' | 'reemplazar', d
     await database.rutas.bulkPut(fix(b.rutas))
     await database.diario.bulkPut(fix(b.diario ?? []))
     await database.fotos.bulkPut(fix(b.fotos ?? []))
+    await database.marcas.bulkPut(b.marcas ?? [])
     return { repetidos: b.bancales.length - bancales.length }
   })
 }

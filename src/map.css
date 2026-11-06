@@ -164,3 +164,32 @@
 .fav-row { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px; margin: -2px; }
 .fav-row::-webkit-scrollbar { display: none; }
 .fav-chip { display: flex; align-items: center; gap: 6px; flex: none; max-width: 180px; height: 40px; padding: 0 12px; border-radius: 20px; font-size: 14px; font-weight: 600; }
+
+/* Pasos cerrados, referencias y paradas */
+.marca-pin { position: absolute; transform: translate(-50%, -50%); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.45); font: 700 13px/1 var(--f-body, system-ui); color: #fff; }
+.marca-pin.cerrado { background: #c92a2a; }
+.marca-pin.ref { background: #1971c2; font-style: italic; font-family: Georgia, serif; }
+.marca-label { position: absolute; left: 16px; top: -10px; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; padding: 2px 7px; border-radius: 6px; background: rgb(28 31 21 / 0.82); color: #fff; font-size: 12px; font-weight: 600; }
+.stop-pin { position: absolute; transform: translate(-50%, -50%); display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: #1c1f15; color: #fff; border: 2px solid #fff; font-size: 13px; font-weight: 700; box-shadow: 0 1px 4px rgb(0 0 0 / 0.45); }
+.journey-ref { display: flex; gap: 8px; align-items: center; font-weight: 600; background: color-mix(in srgb, #1971c2 14%, var(--surface)); color: var(--ink); }
+.search .mic-btn { width: 36px; height: 36px; flex: none; margin-right: -6px; }
+.mic-btn.on { color: var(--signal); animation: pulse-mic 1s ease-in-out infinite alternate; }
+@keyframes pulse-mic { to { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .mic-btn.on { animation: none; } }
+.plan-field .icon-btn { width: 34px; height: 34px; flex: none; margin-right: -6px; }
+.plan-num { width: 20px; height: 20px; border-radius: 50%; flex: none; display: grid; place-items: center; background: #1c1f15; color: #fff; font-size: 12px; font-weight: 700; }
+.plan-stack { max-height: 34dvh; overflow-y: auto; }
+.qr-wrap { display: grid; place-items: center; padding: 8px 0; }
+.qr { width: min(260px, 70vw); height: auto; border-radius: 12px; }
+.qr-video { width: 100%; max-height: 50dvh; object-fit: cover; border-radius: 14px; background: #000; }
+/* Campos del planificador: compactos para dejar sitio al mapa */
+.plan-field { padding: 4px 6px 4px 12px; min-height: 46px; }
+.plan-pick { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; text-align: left; background: none; border: 0; padding: 4px 0; color: inherit; font: inherit; }
+.plan-pick .grow { display: flex; flex-direction: column; min-width: 0; }
+.plan-stack { gap: 4px; }
+.plan-stack .btn.small { min-height: 34px; }
+.plan-screen .journey-panel { max-height: 36dvh; }
+.plan-screen .plan-stack { max-height: 27dvh; }
+.plan-screen .plan-value { font-size: 15px; }
+.plan-screen .plan-label { font-size: 10px; }
+.plan-screen .journey-map { min-height: 160px; }

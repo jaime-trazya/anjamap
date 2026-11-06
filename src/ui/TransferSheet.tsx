@@ -46,9 +46,9 @@ export function TransferSheet({ ids, onClose }: { ids?: string[]; onClose: () =>
       <button className="btn block" disabled={busy || !total} onClick={() => void run(() => exportData(false))}><Download size={18} /> Descargar copia completa</button>
       <button className="btn block" disabled={busy || !total} onClick={() => void run(() => exportData(false, true))}><FileDown size={18} /> Exportar GPX · sin fotos</button>
       <div className="section"><h2>Recibir bancales</h2></div>
-      <button className="btn block big" disabled={busy} onClick={() => input.current?.click()}><Upload size={20} /> Importar JSON o GPX</button>
-      <p className="meta">Los archivos JSON de Anjamap conservan las fotos. GPX permite intercambiar ubicaciones y recorridos con otras aplicaciones. También se admiten las copias antiguas.</p>
+      <button className="btn block big" disabled={busy} onClick={() => input.current?.click()}><Upload size={20} /> Importar JSON, GPX o CSV</button>
+      <p className="meta">Los archivos JSON de Anjamap conservan las fotos. GPX permite intercambiar ubicaciones y recorridos con otras aplicaciones. Un CSV de hoja de cálculo necesita columnas de nombre, latitud y longitud (y opcionalmente finca y nota). También se admiten las copias antiguas.</p>
     </>}
-    <input ref={input} hidden type="file" accept=".json,.gpx,application/json,application/gpx+xml" onChange={(e) => { load(e.target.files?.[0]); e.target.value = '' }} />
+    <input ref={input} hidden type="file" accept=".json,.gpx,.csv,application/json,application/gpx+xml,text/csv" onChange={(e) => { load(e.target.files?.[0]); e.target.value = '' }} />
   </Sheet>
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import L from 'leaflet'
-import type { Bancal, Camino, Ruta } from '../db/db'
+import type { Bancal, Camino, Marca, Ruta } from '../db/db'
 import { splitRoute, type LatLon } from '../lib/geo'
 import type { Fix } from '../ui/position'
 import { COMARCAS } from '../domain/comarcas'
@@ -108,6 +108,11 @@ export interface MapViewProps {
   trail?: LatLon[] | null
   /** Punto de salida de una ruta planificada */
   origen?: LatLon | null
+  /** Paradas intermedias de una ruta planificada */
+  paradas?: LatLon[] | null
+  /** Pasos cerrados y referencias */
+  marcas?: Marca[]
+  onMarcaClick?: (m: Marca) => void
   /** El mapa puede girar (fijo durante la vida del componente) */
   rotatable?: boolean
   /** Rumbo que queda hacia arriba; null = norte arriba. Solo con `rotatable`. */
@@ -396,6 +401,7 @@ export function MapView(props: MapViewProps) {
   const cocheKey = props.coche ? props.coche.join(',') : ''
   const puntoKey = props.punto ? props.punto.join(',') : ''
   const origenKey = props.origen ? props.origen.join(',') : ''
+  const paradasKey = (props.paradas ?? []).map((p) => p.join(',')).join(';')
   useEffect(() => {
     const ls = layers.current
     const map = mapRef.current
@@ -416,6 +422,15 @@ export function MapView(props: MapViewProps) {
       if (props.punto) {
         L.marker(props.punto, { pane: 'bancales', interactive: false, icon: bancalIcon({ id: 'punto', nombre: 'Destino', color: '#e0531b' } as Bancal, true, true) }).addTo(ls.bancales)
       }
+      for (const m of props.marcas ?? []) {
+        const html = m.tipo === 'cerrado' ? '<span class="marca-pin cerrado" title="Paso cerrado">✕</span>' : '<span class="marca-pin ref">i</span>'
+        const mk = L.marker([m.lat, m.lon], { pane: 'bancales', keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: html + (showLabel && m.texto ? `<span class="marca-label">${esc(m.texto)}</span>` : '') }) })
+        mk.on('click', () => cb.current.onMarcaClick?.(m))
+        mk.addTo(ls.bancales)
+      }
+      ;(props.paradas ?? []).forEach((p, i) => {
+        L.marker(p, { pane: 'bancales', interactive: false, keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: `<span class="stop-pin">${i + 1}</span>` }) }).addTo(ls.bancales)
+      })
       if (props.origen) {
         L.marker(props.origen, { pane: 'bancales', interactive: false, keyboard: false, icon: L.divIcon({ className: 'pin-wrap', iconSize: [0, 0], html: '<span class="origin-pin"></span>' }) }).addTo(ls.bancales)
       }
@@ -426,7 +441,7 @@ export function MapView(props: MapViewProps) {
       map.off('zoomend', draw)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.bancales, props.selectedId, cocheKey, puntoKey, origenKey])
+  }, [props.bancales, props.selectedId, props.marcas, cocheKey, puntoKey, origenKey, paradasKey])
 
   useEffect(() => {
     const ls = layers.current

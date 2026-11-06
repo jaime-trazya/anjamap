@@ -9,6 +9,8 @@ export interface NewBancalOpts {
   nombre?: string
   finca?: string
   color?: string
+  /** Foto que se añade al sitio al guardarlo (p. ej. la foto de la que se ha sacado la ubicación) */
+  foto?: string
 }
 
 export interface EditorApi {

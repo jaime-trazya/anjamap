@@ -22,3 +22,20 @@ describe('intercambio rápido', () => {
     expect(photoSize(400, 300)).toEqual({ width: 400, height: 300 })
   })
 })
+
+describe('importar CSV', () => {
+  it('lee una hoja española con punto y coma y coma decimal', async () => {
+    const { csvABackup } = await import('./transfer')
+    const { backup, descartadas } = csvABackup('﻿Nombre;Latitud;Longitud;Finca;Notas\n"Caseta; norte";39,1012;-0,6957;La Solana;Entrada por la cadena\nSin coordenadas;;;;\nPozo;39.2;-0.71;;\n')
+    expect(backup.bancales.map((b) => b.nombre)).toEqual(['Caseta; norte', 'Pozo'])
+    expect(backup.bancales[0]).toMatchObject({ lat: 39.1012, lon: -0.6957, finca: 'La Solana', nota: 'Entrada por la cadena' })
+    expect(descartadas).toBe(1)
+  })
+  it('acepta una columna de coordenadas y da ids estables', async () => {
+    const { csvABackup } = await import('./transfer')
+    const a = csvABackup('sitio,coordenadas\nHuerto,"39.1, -0.7"\n').backup
+    const b = csvABackup('sitio,coordenadas\nHuerto,"39.1, -0.7"\n').backup
+    expect(a.bancales[0].id).toBe(b.bancales[0].id)
+    expect(() => csvABackup('nombre\nHuerto\n')).toThrow(/latitud/)
+  })
+})

@@ -9,6 +9,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const caminos = useLiveQuery(() => db.caminos.toArray())
   const rutas = useLiveQuery(() => db.rutas.toArray())
   const ajustes = useLiveQuery(() => db.ajustes.toArray())
+  const marcas = useLiveQuery(() => db.marcas.toArray())
 
   const settings = useMemo<Settings>(() => {
     const s: Record<string, unknown> = { ...DEFAULT_SETTINGS }
@@ -24,10 +25,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       bancales: [...(bancales ?? [])].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { numeric: true })),
       caminos: caminos ?? [],
       rutas: rutas ?? [],
+      marcas: marcas ?? [],
       settings,
       osm,
     }),
-    [bancales, caminos, rutas, ajustes, settings, osm],
+    [bancales, caminos, rutas, marcas, ajustes, settings, osm],
   )
   return <DataCtx.Provider value={value}>{children}</DataCtx.Provider>
 }

@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react'
-import type { Bancal, Camino, Ruta, Settings } from '../db/db'
+import type { Bancal, Camino, Marca, Ruta, Settings } from '../db/db'
 import type { OsmState } from './osm'
 
 export interface DataValue {
@@ -7,6 +7,8 @@ export interface DataValue {
   bancales: Bancal[]
   caminos: Camino[]
   rutas: Ruta[]
+  /** Pasos cerrados y referencias propias */
+  marcas: Marca[]
   settings: Settings
   osm: OsmState
 }
